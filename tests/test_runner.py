@@ -158,3 +158,17 @@ async def test_undefined_template_reference_fails_that_step_without_crashing_the
 
     with pytest.raises(PipelineRunError, match="template error"):
         await run_pipeline(pipeline, "http://gw.test", http_client=client, poll_interval=0)
+
+
+@pytest.mark.asyncio
+async def test_malformed_template_syntax_fails_that_step_without_crashing_the_run():
+    # Regression: a step referencing "{{ vars.missing" (no closing braces) used to
+    # raise a raw jinja2.TemplateSyntaxError that escaped run_pipeline uncaught -
+    # instead of the documented PipelineRunError - crashing the whole run in a way
+    # `awe run`'s CLI error handling (which only catches PipelineRunError) could not
+    # turn into a clean "error:" message.
+    pipeline = _pipeline([{"name": "a", "capability": "echo", "params": {"x": "{{ vars.missing"}}])
+    client = httpx.AsyncClient(transport=httpx.MockTransport(_fake_gateway()))
+
+    with pytest.raises(PipelineRunError, match="template error"):
+        await run_pipeline(pipeline, "http://gw.test", http_client=client, poll_interval=0)

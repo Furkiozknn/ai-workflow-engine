@@ -36,3 +36,11 @@ def test_reference_to_unfinished_step_raises_template_render_error():
 def test_reference_to_unknown_variable_raises_template_render_error():
     with pytest.raises(TemplateRenderError):
         render_params({"x": "{{ vars.nope }}"}, steps={}, variables={})
+
+
+def test_malformed_template_syntax_raises_template_render_error():
+    # A bad Jinja2 syntax error (unclosed '{{') used to escape as a raw
+    # jinja2.TemplateSyntaxError instead of the documented TemplateRenderError -
+    # see templating._render_value's broad except.
+    with pytest.raises(TemplateRenderError):
+        render_params({"x": "{{ vars.missing"}, steps={}, variables={})

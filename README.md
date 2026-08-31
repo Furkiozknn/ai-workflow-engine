@@ -78,6 +78,14 @@ uv run pytest -v
 
 ## Roadmap / known v1 limitations
 
+- Pipeline YAML files are trusted the same as code: `steps[].params` strings render
+  through a full (non-sandboxed) Jinja2 `Environment`, and `steps[].capability` can
+  invoke any capability the gateway exposes. Fine for today's operator-authored
+  files; if pipeline files ever come from a less-trusted source (a marketplace,
+  an upload, a webhook), that's a Jinja2 SSTI surface (same open question as
+  `prompt-template-manager`'s `renderer.py` — see `research/lab/BACKLOG.md`) and
+  `templating.py`'s `_ENV` should move to `jinja2.sandbox.SandboxedEnvironment`
+  before accepting untrusted pipelines.
 - No retry policy per step — a failed step fails the whole run. Retries are a natural v2 addition once real (non-mock) providers surface which failures are worth retrying automatically.
 - `depends_on` is explicit, not inferred from template references — see above. Auto-inference was considered and deliberately deferred: it's a nicer authoring experience but adds a real risk of a template edit silently changing execution order in a way the YAML doesn't show.
 - No persistence — a pipeline run's state lives only in the process that ran `awe run`. There's no resume-from-where-it-failed yet; re-running re-executes every step from scratch.

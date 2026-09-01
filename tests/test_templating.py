@@ -38,6 +38,16 @@ def test_reference_to_unknown_variable_raises_template_render_error():
         render_params({"x": "{{ vars.nope }}"}, steps={}, variables={})
 
 
+def test_jinja2_ssti_gadget_chain_is_blocked_by_sandboxing():
+    # The standard Jinja2 SSTI payload: reach __class__/__mro__/__subclasses__
+    # off any object in scope to walk to arbitrary Python classes. Under a
+    # plain jinja2.Environment this executes; SandboxedEnvironment must
+    # refuse attribute access on dunder names instead.
+    payload = "{{ vars.animal.__class__.__mro__[1].__subclasses__() }}"
+    with pytest.raises(TemplateRenderError):
+        render_params({"x": payload}, steps={}, variables={"animal": "cat"})
+
+
 def test_malformed_template_syntax_raises_template_render_error():
     # A bad Jinja2 syntax error (unclosed '{{') used to escape as a raw
     # jinja2.TemplateSyntaxError instead of the documented TemplateRenderError -

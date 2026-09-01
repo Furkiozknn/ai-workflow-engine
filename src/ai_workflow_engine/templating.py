@@ -7,29 +7,27 @@ misspelled step/variable is a loud render-time error, not a silently empty
 string). Non-string values (numbers, booleans, nested dicts/lists) pass
 through structurally - only strings actually get template-rendered.
 
-Trust note (same open question already logged for prompt-template-manager's
-``renderer.py`` in research/lab/BACKLOG.md, P2/conditional): ``_ENV`` is a
-plain ``jinja2.Environment``, not a ``SandboxedEnvironment`` - it runs the
-*full* Jinja2 language (loops, filters, macros, attribute access), not just
-``{{ var }}`` substitution. That is fine under today's assumption that a
-pipeline YAML file is operator-authored and trusted the same as code (it can
-already invoke arbitrary gateway capabilities). It stops being fine the
-moment a pipeline file can come from a less-trusted source (a shared
-marketplace, an uploaded file, a webhook) - Jinja2 SSTI payloads in a
-``params`` string (e.g. reaching ``__class__``/``__mro__``/``__globals__``
-off any object in ``steps``/``vars``) can read process state or worse. If
-that assumption ever changes, switch ``_ENV`` to
-``jinja2.sandbox.SandboxedEnvironment`` rather than trying to sanitize
-template strings.
+``_ENV`` is a ``jinja2.sandbox.SandboxedEnvironment``, not a plain
+``Environment`` - a template string can still reach ``__class__``/``__mro__``/
+``__globals__`` off any object in ``steps``/``vars`` (the standard Jinja2 SSTI
+gadget chain) under a plain ``Environment``, which is RCE-capable. Sandboxing
+was verified free: every legitimate usage here (``vars.x`` / dict/attribute
+access on ``steps.name.result``, ``StrictUndefined`` error behavior) renders
+identically under ``SandboxedEnvironment`` - this codebase never used macros,
+custom filters, or anything else Sandboxed would actually block, so this
+costs nothing today and closes the SSTI path before a pipeline file could
+ever plausibly come from a less-trusted source than "operator-authored,
+trusted like code" (a shared marketplace, an uploaded file, a webhook).
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from jinja2 import Environment, StrictUndefined
+from jinja2 import StrictUndefined
+from jinja2.sandbox import SandboxedEnvironment
 
-_ENV = Environment(undefined=StrictUndefined)
+_ENV = SandboxedEnvironment(undefined=StrictUndefined)
 
 
 class TemplateRenderError(Exception):

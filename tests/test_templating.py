@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import pytest
 
-from ai_workflow_engine.templating import TemplateRenderError, render_params
+from ai_workflow_engine.templating import (
+    TemplateRenderError,
+    find_step_references,
+    find_var_references,
+    render_params,
+)
 
 
 def test_plain_values_pass_through_unrendered():
@@ -44,3 +49,33 @@ def test_malformed_template_syntax_raises_template_render_error():
     # see templating._render_value's broad except.
     with pytest.raises(TemplateRenderError):
         render_params({"x": "{{ vars.missing"}, steps={}, variables={})
+
+
+def test_sandboxed_environment_blocks_unsafe_attribute_access():
+    steps = {"a": {"result": {"x": "hi"}}}
+    with pytest.raises(TemplateRenderError, match="unsafe operation"):
+        render_params({"x": "{{ steps.a.result.x.__class__.__mro__ }}"}, steps=steps, variables={})
+
+
+def test_find_step_references_extracts_step_names():
+    params = {
+        "source": "{{ steps.generate.result.output }}",
+        "other": "{{ steps.caption.result.text }} and {{ steps.generate.result.output }}",
+        "literal": "no refs here",
+    }
+    assert find_step_references(params) == {"generate", "caption"}
+
+
+def test_find_step_references_empty_when_no_step_refs():
+    assert find_step_references({"prompt": "{{ vars.subject }}"}) == set()
+
+
+def test_find_var_references_extracts_var_names():
+    params = {"prompt": "a {{ vars.subject }} on {{ vars.background }}"}
+    assert find_var_references(params) == {"subject", "background"}
+
+
+def test_find_references_walk_nested_dicts_and_lists():
+    params = {"outer": {"list": ["{{ steps.a.result.x }}", "{{ vars.y }}"]}}
+    assert find_step_references(params) == {"a"}
+    assert find_var_references(params) == {"y"}

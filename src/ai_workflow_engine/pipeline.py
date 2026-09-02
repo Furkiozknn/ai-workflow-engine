@@ -10,15 +10,48 @@ reading the YAML, not inferred by scanning template strings.
 
 from __future__ import annotations
 
+import difflib
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 import yaml
 
+from .templating import find_step_references, find_var_references
+
 
 class PipelineError(Exception):
     pass
+
+
+class _NoAliasSafeLoader(yaml.SafeLoader):
+    """A SafeLoader that refuses YAML anchors/aliases (``&anchor`` / ``*alias``).
+
+    An alias makes the *parsed* object graph share references instead of
+    duplicating them, so a nested-anchor file (the "billion laughs" pattern,
+    applied to YAML instead of XML) parses in milliseconds -- but this
+    project has no de-duplicating walk anywhere downstream: Jinja2
+    rendering and ``json.dumps`` (for `awe run`'s output) both walk a
+    params tree at full depth with no awareness that two branches are the
+    same object, so they reproduce the full exponential blowup the instant
+    they touch it. A handful of nested anchors (a few hundred bytes of
+    YAML) is enough to make either one hang or exhaust memory. Pipeline
+    files have no legitimate need for anchor reuse, so this closes the
+    hole outright instead of trying to bound the resulting size after the
+    fact (which would already be too late for the reference-sharing case).
+    """
+
+    def compose_node(self, parent, index):  # noqa: D102 - see class docstring
+        if self.check_event(yaml.events.AliasEvent):
+            event = self.get_event()
+            raise PipelineError(
+                f"pipeline YAML uses a YAML anchor/alias reference (*{event.anchor}) "
+                f"at line {event.start_mark.line + 1}; anchors/aliases are not supported "
+                "in pipeline files (a small file using them can expand into an "
+                "exponentially large structure once rendered or printed) -- write "
+                "the value out in full instead"
+            )
+        return super().compose_node(parent, index)
 
 
 @dataclass
@@ -55,7 +88,7 @@ def load_pipeline(path: str | Path) -> Pipeline:
 
 def parse_pipeline_str(text: str) -> Pipeline:
     try:
-        data = yaml.safe_load(text)
+        data = yaml.load(text, Loader=_NoAliasSafeLoader)
     except yaml.YAMLError as exc:
         raise PipelineError(f"invalid YAML: {exc}") from exc
     if not isinstance(data, dict):
@@ -107,9 +140,70 @@ def parse_pipeline(data: dict[str, Any]) -> Pipeline:
             if dep == step.name:
                 raise PipelineError(f"step {step.name!r} cannot depend on itself")
 
+    _check_step_references(steps, known)
+
     pipeline = Pipeline(name=name, steps=steps)
     _check_acyclic(pipeline)
     return pipeline
+
+
+def _describe_unknown_step(name: str, known: list[str]) -> str:
+    suggestions = difflib.get_close_matches(name, known, n=1)
+    if suggestions:
+        return f"{name!r} (did you mean {suggestions[0]!r}?)"
+    return repr(name)
+
+
+def _check_step_references(steps: list[Step], known: set[str]) -> None:
+    """Enforce, at load time, the invariant this project's design already
+    depends on but never used to check: a step referencing
+    ``steps.<name>...`` in its params must list ``<name>`` in its own
+    ``depends_on``. Without this, a forgotten ``depends_on`` entry doesn't
+    fail loudly and consistently -- it either works by luck (the
+    referenced step happens to land in an earlier layer anyway because of
+    *other* declared deps) or fails with a StrictUndefined error midway
+    through a real run, wasting whatever the run already did. Catching it
+    here turns a flaky, order-dependent runtime bug into an immediate,
+    actionable load-time error.
+    """
+    known_list = sorted(known)
+    for step in steps:
+        referenced = find_step_references(step.params)
+
+        if step.name in referenced:
+            raise PipelineError(
+                f"step {step.name!r} references itself via 'steps.{step.name}...', "
+                "which can never be defined (a step cannot depend on its own result)"
+            )
+
+        unknown_refs = referenced - known
+        if unknown_refs:
+            described = ", ".join(_describe_unknown_step(r, known_list) for r in sorted(unknown_refs))
+            raise PipelineError(
+                f"step {step.name!r} references unknown step(s) via 'steps.<name>...': {described}"
+            )
+
+        missing_deps = sorted(referenced - set(step.depends_on))
+        if missing_deps:
+            refs_text = ", ".join(f"steps.{dep}..." for dep in missing_deps)
+            raise PipelineError(
+                f"step {step.name!r} references {refs_text} in its params but does not list "
+                f"{missing_deps} in depends_on -- add them so this step is guaranteed to run "
+                "after they finish, instead of the order being accidental"
+            )
+
+
+def referenced_variables(pipeline: Pipeline) -> set[str]:
+    """Every ``vars.<name>`` referenced anywhere in the pipeline's steps --
+    the ``--var`` flags a caller needs to supply for `awe run` to have a
+    chance of succeeding. Best-effort static scan (see
+    ``templating.find_var_references``); exposed mainly for `awe validate`
+    to show upfront, before anyone actually tries to run the pipeline.
+    """
+    refs: set[str] = set()
+    for step in pipeline.steps:
+        refs |= find_var_references(step.params)
+    return refs
 
 
 def _check_acyclic(pipeline: Pipeline) -> None:

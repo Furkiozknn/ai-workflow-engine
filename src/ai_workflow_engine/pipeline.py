@@ -11,6 +11,7 @@ reading the YAML, not inferred by scanning template strings.
 from __future__ import annotations
 
 import difflib
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -18,6 +19,14 @@ from typing import Any
 import yaml
 
 from .templating import find_step_references, find_var_references
+
+# gateway_poll.submit_url builds the request as f"{base_url}/v1/{capability}"
+# with no encoding or escaping - an unrestricted capability string is a
+# path/query injection into that request. Confirmed exploitable:
+# "../admin/delete-all" escapes the /v1/ namespace entirely via dot-segment
+# normalization, and "images?admin=true" injects arbitrary query params.
+# Restricting to this shape closes that off before it ever reaches submit_url.
+_CAPABILITY_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
 class PipelineError(Exception):
@@ -121,6 +130,11 @@ def parse_pipeline(data: dict[str, Any]) -> Pipeline:
         capability = raw.get("capability")
         if not isinstance(capability, str) or not capability:
             raise PipelineError(f"step {step_name!r} must have a non-empty string 'capability'")
+        if not _CAPABILITY_RE.match(capability):
+            raise PipelineError(
+                f"step {step_name!r}: 'capability' {capability!r} must match {_CAPABILITY_RE.pattern} "
+                "(it becomes a URL path segment - no '/', '?', '.', or whitespace allowed)"
+            )
 
         params = raw.get("params", {})
         if not isinstance(params, dict):

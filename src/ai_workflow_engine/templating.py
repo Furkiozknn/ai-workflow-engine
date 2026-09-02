@@ -7,17 +7,17 @@ misspelled step/variable is a loud render-time error, not a silently empty
 string). Non-string values (numbers, booleans, nested dicts/lists) pass
 through structurally - only strings actually get template-rendered.
 
-Security note: ``_ENV`` is a ``jinja2.sandbox.SandboxedEnvironment``, not a
-plain ``Environment`` - see this repo's README Security section. A pipeline
-file can come from somewhere other than the operator's own keyboard (a
-shared library, a downloaded example, a pull request), and a plain
-``Environment`` lets a malicious ``params`` string escape string
-interpolation entirely and reach arbitrary Python objects (the classic
-``{{ ''.__class__.__mro__[1].__subclasses__() }}`` pattern) -- real code
-execution, not a theoretical risk. ``SandboxedEnvironment`` blocks that
-while leaving ordinary ``{{ vars.x }}`` / ``{{ steps.a.result.x }}``
-interpolation (the only thing a legitimate pipeline template does) working
-exactly as before.
+``_ENV`` is a ``jinja2.sandbox.SandboxedEnvironment``, not a plain
+``Environment`` - a template string can still reach ``__class__``/``__mro__``/
+``__globals__`` off any object in ``steps``/``vars`` (the standard Jinja2 SSTI
+gadget chain) under a plain ``Environment``, which is RCE-capable. Sandboxing
+was verified free: every legitimate usage here (``vars.x`` / dict/attribute
+access on ``steps.name.result``, ``StrictUndefined`` error behavior) renders
+identically under ``SandboxedEnvironment`` - this codebase never used macros,
+custom filters, or anything else Sandboxed would actually block, so this
+costs nothing today and closes the SSTI path before a pipeline file could
+ever plausibly come from a less-trusted source than "operator-authored,
+trusted like code" (a shared marketplace, an uploaded file, a webhook).
 """
 
 from __future__ import annotations

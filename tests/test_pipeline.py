@@ -36,6 +36,31 @@ def test_step_missing_capability_rejected():
         parse_pipeline(_minimal([{"name": "a"}]))
 
 
+@pytest.mark.parametrize(
+    "capability",
+    [
+        "../admin/delete-all",  # escapes the /v1/ namespace via dot-segment normalization
+        "images?admin=true",  # injects a query parameter
+        "images/../../secret",
+        "with space",
+        "trailing/slash/",
+        "",
+    ],
+)
+def test_capability_rejects_url_path_injection(capability):
+    # capability becomes a URL path segment (POST /v1/{capability}) with no
+    # encoding - anything but a plain token must be rejected before it ever
+    # reaches the HTTP layer.
+    with pytest.raises(PipelineError, match="capability"):
+        parse_pipeline(_minimal([{"name": "a", "capability": capability}]))
+
+
+@pytest.mark.parametrize("capability", ["echo", "image-generate", "image_upscale", "a1", "ABC"])
+def test_capability_accepts_plain_tokens(capability):
+    pipeline = parse_pipeline(_minimal([{"name": "a", "capability": capability}]))
+    assert pipeline.steps[0].capability == capability
+
+
 def test_duplicate_step_name_rejected():
     with pytest.raises(PipelineError, match="duplicate"):
         parse_pipeline(

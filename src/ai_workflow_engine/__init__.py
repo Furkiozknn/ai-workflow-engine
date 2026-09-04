@@ -9,7 +9,7 @@ Public surface::
 
 from __future__ import annotations
 
-from .pipeline import Pipeline, PipelineError, Step, load_pipeline, parse_pipeline
+from .pipeline import Pipeline, PipelineError, Step, load_pipeline, parse_pipeline, referenced_variables
 from .runner import PipelineRunError, StepResult, run_pipeline
 
 __all__ = [
@@ -18,6 +18,7 @@ __all__ = [
     "Step",
     "load_pipeline",
     "parse_pipeline",
+    "referenced_variables",
     "PipelineRunError",
     "StepResult",
     "run_pipeline",

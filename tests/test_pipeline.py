@@ -158,3 +158,81 @@ def test_execution_layers_independent_steps_are_all_layer_zero():
         )
     )
     assert execution_layers(pipeline) == [["a", "b"]]
+
+
+def test_step_reference_without_matching_depends_on_is_rejected():
+    with pytest.raises(PipelineError, match="does not list"):
+        parse_pipeline(
+            _minimal(
+                [
+                    {"name": "generate", "capability": "gen", "params": {"prompt": "hi"}},
+                    {
+                        "name": "upscale",
+                        "capability": "up",
+                        "params": {"source": "{{ steps.generate.result.output }}"},
+                        # missing depends_on: [generate]
+                    },
+                ]
+            )
+        )
+
+
+def test_step_reference_with_matching_depends_on_is_accepted():
+    pipeline = parse_pipeline(
+        _minimal(
+            [
+                {"name": "generate", "capability": "gen", "params": {"prompt": "hi"}},
+                {
+                    "name": "upscale",
+                    "capability": "up",
+                    "params": {"source": "{{ steps.generate.result.output }}"},
+                    "depends_on": ["generate"],
+                },
+            ]
+        )
+    )
+    assert pipeline.step("upscale").depends_on == ["generate"]
+
+
+def test_step_reference_to_unknown_step_is_rejected_with_suggestion():
+    with pytest.raises(PipelineError, match=r"did you mean 'generate'"):
+        parse_pipeline(
+            _minimal(
+                [
+                    {"name": "generate", "capability": "gen", "params": {"prompt": "hi"}},
+                    {
+                        "name": "upscale",
+                        "capability": "up",
+                        "params": {"source": "{{ steps.generat.result.output }}"},
+                        "depends_on": ["generate"],
+                    },
+                ]
+            )
+        )
+
+
+def test_step_referencing_itself_is_rejected():
+    with pytest.raises(PipelineError, match="references itself"):
+        parse_pipeline(
+            _minimal(
+                [
+                    {"name": "a", "capability": "echo", "params": {"x": "{{ steps.a.result.y }}"}},
+                ]
+            )
+        )
+
+
+def test_yaml_anchor_alias_is_rejected():
+    src = """
+name: bomb
+steps:
+  - name: a
+    capability: echo
+    params: &p
+      x: [1, 2, 3]
+  - name: b
+    capability: echo
+    params: *p
+"""
+    with pytest.raises(PipelineError, match="anchor/alias"):
+        parse_pipeline_str(src)

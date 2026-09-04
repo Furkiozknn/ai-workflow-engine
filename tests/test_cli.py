@@ -54,6 +54,56 @@ def test_run_missing_file_exits_nonzero(monkeypatch, capsys):
     assert "error:" in capsys.readouterr().err
 
 
+def test_validate_shows_referenced_variables(tmp_path: Path, monkeypatch, capsys):
+    pipeline_file = tmp_path / "pipeline.yaml"
+    pipeline_file.write_text(
+        """
+name: with-vars
+steps:
+  - name: a
+    capability: echo
+    params:
+      prompt: "{{ vars.subject }}"
+"""
+    )
+
+    _run(monkeypatch, ["validate", str(pipeline_file)])
+    out = capsys.readouterr().out
+    assert "variables referenced: subject" in out
+
+
+def test_validate_omits_variables_line_when_none_referenced(tmp_path: Path, monkeypatch, capsys):
+    pipeline_file = tmp_path / "pipeline.yaml"
+    pipeline_file.write_text(PIPELINE_YAML)
+
+    _run(monkeypatch, ["validate", str(pipeline_file)])
+    out = capsys.readouterr().out
+    assert "variables referenced" not in out
+
+
+def test_validate_reports_missing_depends_on_for_step_reference(tmp_path: Path, monkeypatch, capsys):
+    pipeline_file = tmp_path / "pipeline.yaml"
+    pipeline_file.write_text(
+        """
+name: bad
+steps:
+  - name: generate
+    capability: gen
+    params:
+      prompt: hi
+  - name: upscale
+    capability: up
+    params:
+      source: "{{ steps.generate.result.output }}"
+"""
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        _run(monkeypatch, ["validate", str(pipeline_file)])
+    assert exc_info.value.code == 1
+    assert "does not list" in capsys.readouterr().err
+
+
 def test_var_flag_parsing_rejects_missing_equals(tmp_path: Path, monkeypatch, capsys):
     pipeline_file = tmp_path / "pipeline.yaml"
     pipeline_file.write_text(PIPELINE_YAML)

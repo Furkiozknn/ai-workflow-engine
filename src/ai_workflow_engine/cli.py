@@ -7,7 +7,7 @@ import asyncio
 import json
 import sys
 
-from .pipeline import PipelineError, execution_layers, load_pipeline
+from .pipeline import PipelineError, execution_layers, load_pipeline, referenced_variables
 from .runner import PipelineRunError, run_pipeline
 
 
@@ -30,6 +30,9 @@ def _cmd_validate(args: argparse.Namespace) -> None:
     print(f"OK: {pipeline.name!r} - {len(pipeline.steps)} step(s) in {len(layers)} layer(s)")
     for i, layer in enumerate(layers):
         print(f"  layer {i}: {', '.join(layer)}")
+    var_refs = referenced_variables(pipeline)
+    if var_refs:
+        print(f"  variables referenced: {', '.join(sorted(var_refs))}")
 
 
 def _cmd_run(args: argparse.Namespace) -> None:

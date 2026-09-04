@@ -1,0 +1,31 @@
+# A three-step pipeline that never touches the network: inspect a local image,
+# resize it, then optimise the resized copy for the web. Every step is a
+# `media-*` capability of ai-job-gateway (its `media` extra), so this runs on
+# any machine with the gateway and no key, no GPU, no external service.
+#
+#   awe run examples/local-media-chain.yaml \
+#       --gateway-url http://localhost:8000 \
+#       --var image=/absolute/path/to/photo.png
+#
+# `inspect` and `resize` share no data, so they run concurrently in layer 1;
+# `optimize` waits for `resize` and reads its output_path.
+name: local-media-chain
+steps:
+  - name: inspect
+    capability: media-inspect
+    params:
+      path: "{{ vars.image }}"
+
+  - name: resize
+    capability: media-resize
+    params:
+      image_path: "{{ vars.image }}"
+      width: 512
+      height: 512
+
+  - name: optimize
+    capability: media-optimize
+    params:
+      path: "{{ steps.resize.result.output_path }}"
+      goal: web
+    depends_on: [resize]

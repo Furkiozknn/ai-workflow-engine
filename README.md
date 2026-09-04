@@ -31,18 +31,22 @@ uv sync --group dev
 name: generate-and-upscale
 steps:
   - name: generate
-    capability: image-generate
+    capability: generate-image        # hosted (Pollinations.ai) - no key, but the prompt leaves the machine
     params:
       prompt: "{{ vars.prompt }}"
+      width: 768
+      height: 512
       seed: 42
 
   - name: upscale
-    capability: image-upscale
+    capability: media-upscale         # local (FSRCNN via mini-creative-toolkit)
     params:
-      source_url: "{{ steps.generate.result.image_url }}"
+      image_path: "{{ steps.generate.result.output_path }}"
       scale: 2
     depends_on: [generate]
 ```
+
+These are real capabilities of [`ai-job-gateway`](https://github.com/Furkiozknn/ai-job-gateway) started with its `media` extra — `generate-image` is hosted and keyless, every `media-*` step runs locally. The gateway and the toolkit share a filesystem, so a step's `output_path` is a path the next step reads directly. [`examples/local-media-chain.yaml`](examples/local-media-chain.yaml) is a three-step pipeline (`inspect ∥ resize → optimize`) that never touches the network at all.
 
 - `steps[].capability` — the `ai-job-gateway` capability to submit the job to (`POST /v1/{capability}`).
 - `steps[].params` — the job's params. Any string value is rendered as a Jinja2 template against `vars.*` (CLI `--var KEY=VALUE`) and `steps.<name>.result.*` (any already-finished step in an earlier layer). Non-string values pass through unchanged.

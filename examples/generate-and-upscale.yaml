@@ -1,27 +1,30 @@
-# A minimal two-step pipeline: generate an image, then "upscale" it.
-# Run against a real ai-job-gateway server's mock-generate capability (see
-# that repo's README) with:
+# A two-step pipeline that does real work with no API key anywhere:
+# generate an image through Pollinations.ai (hosted - the one capability that
+# leaves the machine), then upscale it locally with FSRCNN.
 #
+# Needs an ai-job-gateway started with its `media` extra installed:
+#
+#   uv sync --extra media && uv run ai-job-gateway serve       # in ai-job-gateway
 #   awe run examples/generate-and-upscale.yaml \
 #       --gateway-url http://localhost:8000 \
 #       --var prompt="a red sneaker on a white background"
 #
-# mock-generate's result doesn't have an image_url field, so this example
-# uses mock-generate for both steps to stay runnable against ai-job-gateway's
-# own bundled capabilities with no real model provider configured - swap
-# `capability` for real capabilities (e.g. image-generate / image-upscale)
-# once real providers are wired up.
+# The gateway and the toolkit share a filesystem: `output_path` from the
+# generate step is a local path the upscale step reads directly.
+# For a fully offline dry run swap both capabilities for `mock-generate`.
 name: generate-and-upscale
 steps:
   - name: generate
-    capability: mock-generate
+    capability: generate-image
     params:
       prompt: "{{ vars.prompt }}"
+      width: 768
+      height: 512
       seed: 42
 
   - name: upscale
-    capability: mock-generate
+    capability: media-upscale
     params:
-      source: "{{ steps.generate.result.output }}"
+      image_path: "{{ steps.generate.result.output_path }}"
       scale: 2
     depends_on: [generate]

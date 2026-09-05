@@ -50,7 +50,7 @@ These are real capabilities of [`ai-job-gateway`](https://github.com/Furkiozknn/
 
 - `steps[].capability` — the `ai-job-gateway` capability to submit the job to (`POST /v1/{capability}`).
 - `steps[].params` — the job's params. Any string value is rendered as a Jinja2 template against `vars.*` (CLI `--var KEY=VALUE`) and `steps.<name>.result.*` (any already-finished step in an earlier layer). Non-string values pass through unchanged.
-- `steps[].depends_on` — explicit list of step names this step must wait for. **Not inferred from template references** — if a step's params reference `steps.generate...`, that step must also list `generate` in its own `depends_on`. This keeps the DAG's shape visible just by reading the YAML, without needing to parse every template string to know the execution order — and it's now **enforced**: a `steps.generate...` reference with `generate` missing from `depends_on` is rejected at load time (`ptm validate` and `awe run` both call the same loader), not just documented as a convention to follow.
+- `steps[].depends_on` — explicit list of step names this step must wait for. **Not inferred from template references** — if a step's params reference `steps.generate...`, that step must also list `generate` in its own `depends_on`. This keeps the DAG's shape visible just by reading the YAML, without needing to parse every template string to know the execution order — and it's now **enforced**: a `steps.generate...` reference with `generate` missing from `depends_on` is rejected at load time (`awe validate` and `awe run` both call the same loader), not just documented as a convention to follow.
 
 ## CLI usage
 
@@ -100,7 +100,7 @@ print(results["upscale"].result)
 uv run pytest -v
 ```
 
-47 tests as of this writing.
+59 tests as of this writing.
 
 ## Security
 

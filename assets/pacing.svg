@@ -1,0 +1,158 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 674" width="1200" height="674" role="img" aria-label="Two bounds on what one execution layer costs the gateway. Top: a 40-step layer with no cap puts all 40 jobs in flight at once; with the default max_concurrent_steps of 10 the peak is 10 and all 40 steps still run, that number chosen to match ai-job-gateway's own webhook fan-out and to sit inside httpx's 20-connection keepalive pool. Bottom: poll counts measured at a 0.3 second base interval - a 3 second job goes from 11 polls to 8, 6 seconds from 21 to 10, 15 seconds from 51 to 12, and 30 seconds from 101 to 15 - at the cost of learning a job finished up to one interval late, between 0.34 and 1.13 seconds here and bounded by the 5 second ceiling.">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0d1117"/>
+      <stop offset="55%" stop-color="#0f1f24"/>
+      <stop offset="100%" stop-color="#0b1a20"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#39d3bb"/>
+      <stop offset="50%" stop-color="#4c8dff"/>
+      <stop offset="100%" stop-color="#a371f7"/>
+    </linearGradient>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#8b98a9"/>
+    </marker>
+  </defs>
+  <rect width="1200" height="674" fill="url(#bg)"/>
+  <rect x="0" y="0" width="1200" height="4" fill="url(#accent)"/>
+  <text x="40" y="56" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="24" font-weight="700" fill="#e6edf3">a layer's width is not its burst size</text>
+  <text x="40" y="84" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif" font-size="14.5" fill="#8b98a9">both bounds measured against the mock transport in tests/test_runner.py, not estimated</text>
+    <text x="40" y="128" text-anchor="start" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="11.5" fill="#5c6b7f">HOW MANY STEPS ARE IN FLIGHT</text>
+    <rect x="40" y="146" width="320" height="176" rx="12" fill="#131a26" stroke="#f2777a" stroke-width="1.6"/>
+    <text x="60" y="174" text-anchor="start" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="14" fill="#f2777a">40-step layer</text>
+    <text x="60" y="194" text-anchor="start" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif" font-size="12.5" fill="#8b98a9">no cap: the width is the burst</text>
+    <rect x="60" y="212" width="8" height="10" rx="2" fill="#f2777a"/>
+    <rect x="75" y="212" width="8" height="10" rx="2" fill="#f2777a"/>
+    <rect x="90" y="212" width="8" height="10" rx="2" fill="#f2777a"/>
+    <rect x="105" y="212" width="8" height="10" rx="2" fill="#f2777a"/>
+    <rect x="120" y="212" width="8" height="10" rx="2" fill="#f2777a"/>
+    <rect x="135" y="212" width="8" height="10" rx="2" fill="#f2777a"/>
+    <rect x="150" y="212" width="8" height="10" rx="2" fill="#f2777a"/>
+    <rect x="165" y="212" width="8" height="10" rx="2" fill="#f2777a"/>
+    <rect x="180" y="212" width="8" height="10" rx="2" fill="#f2777a"/>
+    <rect x="195" y="212" width="8" height="10" rx="2" fill="#f2777a"/>
+    <rect x="60" y="228" width="8" height="10" rx="2" fill="#f2777a"/>
+    <rect x="75" y="228" width="8" height="10" rx="2" fill="#f2777a"/>
+    <rect x="90" y="228" width="8" height="10" rx="2" fill="#f2777a"/>
+    <rect x="105" y="228" width="8" height="10" rx="2" fill="#f2777a"/>
+    <rect x="120" y="228" width="8" height="10" rx="2" fill="#f2777a"/>
+    <rect x="135" y="228" width="8" height="10" rx="2" fill="#f2777a"/>
+    <rect x="150" y="228" width="8" height="10" rx="2" fill="#f2777a"/>
+    <rect x="165" y="228" width="8" height="10" rx="2" fill="#f2777a"/>
+    <rect x="180" y="228" width="8" height="10" rx="2" fill="#f2777a"/>
+    <rect x="195" y="228" width="8" height="10" rx="2" fill="#f2777a"/>
+    <rect x="60" y="244" width="8" height="10" rx="2" fill="#f2777a"/>
+    <rect x="75" y="244" width="8" height="10" rx="2" fill="#f2777a"/>
+    <rect x="90" y="244" width="8" height="10" rx="2" fill="#f2777a"/>
+    <rect x="105" y="244" width="8" height="10" rx="2" fill="#f2777a"/>
+    <rect x="120" y="244" width="8" height="10" rx="2" fill="#f2777a"/>
+    <rect x="135" y="244" width="8" height="10" rx="2" fill="#f2777a"/>
+    <rect x="150" y="244" width="8" height="10" rx="2" fill="#f2777a"/>
+    <rect x="165" y="244" width="8" height="10" rx="2" fill="#f2777a"/>
+    <rect x="180" y="244" width="8" height="10" rx="2" fill="#f2777a"/>
+    <rect x="195" y="244" width="8" height="10" rx="2" fill="#f2777a"/>
+    <rect x="60" y="260" width="8" height="10" rx="2" fill="#f2777a"/>
+    <rect x="75" y="260" width="8" height="10" rx="2" fill="#f2777a"/>
+    <rect x="90" y="260" width="8" height="10" rx="2" fill="#f2777a"/>
+    <rect x="105" y="260" width="8" height="10" rx="2" fill="#f2777a"/>
+    <rect x="120" y="260" width="8" height="10" rx="2" fill="#f2777a"/>
+    <rect x="135" y="260" width="8" height="10" rx="2" fill="#f2777a"/>
+    <rect x="150" y="260" width="8" height="10" rx="2" fill="#f2777a"/>
+    <rect x="165" y="260" width="8" height="10" rx="2" fill="#f2777a"/>
+    <rect x="180" y="260" width="8" height="10" rx="2" fill="#f2777a"/>
+    <rect x="195" y="260" width="8" height="10" rx="2" fill="#f2777a"/>
+    <text x="60" y="294" text-anchor="start" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="12.5" fill="#f2777a">peak 40 in flight</text>
+    <path d="M378 234.0 L442 234.0" stroke="#8b98a9" stroke-width="1.8" fill="none" marker-end="url(#arrow)"/>
+    <text x="410" y="218.0" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="11.5" fill="#5c6b7f">cap</text>
+    <rect x="460" y="146" width="320" height="176" rx="12" fill="#131a26" stroke="#3fb950" stroke-width="1.6"/>
+    <text x="480" y="174" text-anchor="start" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="14" fill="#3fb950">40-step layer</text>
+    <text x="480" y="194" text-anchor="start" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif" font-size="12.5" fill="#8b98a9">max_concurrent_steps=10 (default)</text>
+    <rect x="480" y="212" width="8" height="10" rx="2" fill="#3fb950"/>
+    <rect x="495" y="212" width="8" height="10" rx="2" fill="#3fb950"/>
+    <rect x="510" y="212" width="8" height="10" rx="2" fill="#3fb950"/>
+    <rect x="525" y="212" width="8" height="10" rx="2" fill="#3fb950"/>
+    <rect x="540" y="212" width="8" height="10" rx="2" fill="#3fb950"/>
+    <rect x="555" y="212" width="8" height="10" rx="2" fill="#3fb950"/>
+    <rect x="570" y="212" width="8" height="10" rx="2" fill="#3fb950"/>
+    <rect x="585" y="212" width="8" height="10" rx="2" fill="#3fb950"/>
+    <rect x="600" y="212" width="8" height="10" rx="2" fill="#3fb950"/>
+    <rect x="615" y="212" width="8" height="10" rx="2" fill="#3fb950"/>
+    <rect x="480" y="228" width="8" height="10" rx="2" fill="#26324a"/>
+    <rect x="495" y="228" width="8" height="10" rx="2" fill="#26324a"/>
+    <rect x="510" y="228" width="8" height="10" rx="2" fill="#26324a"/>
+    <rect x="525" y="228" width="8" height="10" rx="2" fill="#26324a"/>
+    <rect x="540" y="228" width="8" height="10" rx="2" fill="#26324a"/>
+    <rect x="555" y="228" width="8" height="10" rx="2" fill="#26324a"/>
+    <rect x="570" y="228" width="8" height="10" rx="2" fill="#26324a"/>
+    <rect x="585" y="228" width="8" height="10" rx="2" fill="#26324a"/>
+    <rect x="600" y="228" width="8" height="10" rx="2" fill="#26324a"/>
+    <rect x="615" y="228" width="8" height="10" rx="2" fill="#26324a"/>
+    <rect x="480" y="244" width="8" height="10" rx="2" fill="#26324a"/>
+    <rect x="495" y="244" width="8" height="10" rx="2" fill="#26324a"/>
+    <rect x="510" y="244" width="8" height="10" rx="2" fill="#26324a"/>
+    <rect x="525" y="244" width="8" height="10" rx="2" fill="#26324a"/>
+    <rect x="540" y="244" width="8" height="10" rx="2" fill="#26324a"/>
+    <rect x="555" y="244" width="8" height="10" rx="2" fill="#26324a"/>
+    <rect x="570" y="244" width="8" height="10" rx="2" fill="#26324a"/>
+    <rect x="585" y="244" width="8" height="10" rx="2" fill="#26324a"/>
+    <rect x="600" y="244" width="8" height="10" rx="2" fill="#26324a"/>
+    <rect x="615" y="244" width="8" height="10" rx="2" fill="#26324a"/>
+    <rect x="480" y="260" width="8" height="10" rx="2" fill="#26324a"/>
+    <rect x="495" y="260" width="8" height="10" rx="2" fill="#26324a"/>
+    <rect x="510" y="260" width="8" height="10" rx="2" fill="#26324a"/>
+    <rect x="525" y="260" width="8" height="10" rx="2" fill="#26324a"/>
+    <rect x="540" y="260" width="8" height="10" rx="2" fill="#26324a"/>
+    <rect x="555" y="260" width="8" height="10" rx="2" fill="#26324a"/>
+    <rect x="570" y="260" width="8" height="10" rx="2" fill="#26324a"/>
+    <rect x="585" y="260" width="8" height="10" rx="2" fill="#26324a"/>
+    <rect x="600" y="260" width="8" height="10" rx="2" fill="#26324a"/>
+    <rect x="615" y="260" width="8" height="10" rx="2" fill="#26324a"/>
+    <text x="480" y="294" text-anchor="start" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="12.5" fill="#3fb950">peak 10 - all 40 still run</text>
+    <rect x="800" y="146" width="360" height="176" rx="14" fill="#131a26" stroke="#6cb6ff" stroke-width="1.6"/>
+    <text x="822" y="178" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="15" font-weight="700" fill="#6cb6ff">why 10</text>
+    <path d="M822 190 L1138 190" stroke="#26324a" stroke-width="1"/>
+    <circle cx="830" cy="205" r="3.5" fill="#6cb6ff"/>
+    <text x="846" y="210" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#e6edf3">the number ai-job-gateway uses</text>
+    <text x="846" y="230" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#8b98a9">for its own webhook fan-out</text>
+    <circle cx="830" cy="245" r="3.5" fill="#6cb6ff"/>
+    <text x="846" y="250" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#e6edf3">inside httpx's 20-connection</text>
+    <text x="846" y="270" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#8b98a9">keepalive pool, so a wide layer</text>
+    <text x="846" y="290" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#8b98a9">reuses connections instead of</text>
+    <text x="846" y="310" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#8b98a9">opening one per step</text>
+    <path d="M40 340 L1160 340" stroke="#26324a" stroke-width="1"/>
+    <text x="40" y="368" text-anchor="start" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="11.5" fill="#5c6b7f">HOW OFTEN EACH ONE ASKS</text>
+    <text x="40" y="392" text-anchor="start" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#8b98a9">the interval is flat for the first second, then grows 1.5x per poll to a 5s ceiling</text>
+    <text x="60" y="416" text-anchor="start" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="11.5" fill="#5c6b7f">job takes</text>
+    <text x="200" y="416" text-anchor="start" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="11.5" fill="#5c6b7f">polls, flat 0.3s</text>
+    <text x="430" y="416" text-anchor="start" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="11.5" fill="#5c6b7f">polls, backing off</text>
+    <text x="1000" y="416" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="11.5" fill="#5c6b7f">detection lag</text>
+    <path d="M40 428 L1160 428" stroke="#26324a" stroke-width="1"/>
+    <text x="60" y="456" text-anchor="start" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13.5" fill="#e6edf3">3s</text>
+    <text x="200" y="456" text-anchor="start" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13.5" fill="#8b98a9">11</text>
+    <rect x="240" y="445" width="19" height="9" rx="2" fill="#f2777a" opacity="0.55"/>
+    <text x="430" y="456" text-anchor="start" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13.5" fill="#39d3bb">8</text>
+    <rect x="470" y="445" width="14" height="9" rx="2" fill="#3fb950"/>
+    <text x="1000" y="456" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13" fill="#f0b429">+0.34s</text>
+    <text x="60" y="490" text-anchor="start" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13.5" fill="#e6edf3">6s</text>
+    <text x="200" y="490" text-anchor="start" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13.5" fill="#8b98a9">21</text>
+    <rect x="240" y="479" width="36" height="9" rx="2" fill="#f2777a" opacity="0.55"/>
+    <text x="430" y="490" text-anchor="start" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13.5" fill="#39d3bb">10</text>
+    <rect x="470" y="479" width="17" height="9" rx="2" fill="#3fb950"/>
+    <text x="1000" y="490" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13" fill="#f0b429">+1.13s</text>
+    <text x="60" y="524" text-anchor="start" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13.5" fill="#e6edf3">15s</text>
+    <text x="200" y="524" text-anchor="start" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13.5" fill="#8b98a9">51</text>
+    <rect x="240" y="513" width="87" height="9" rx="2" fill="#f2777a" opacity="0.55"/>
+    <text x="430" y="524" text-anchor="start" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13.5" fill="#39d3bb">12</text>
+    <rect x="470" y="513" width="20" height="9" rx="2" fill="#3fb950"/>
+    <text x="1000" y="524" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13" fill="#f0b429">+0.52s</text>
+    <text x="60" y="558" text-anchor="start" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13.5" fill="#e6edf3">30s</text>
+    <text x="200" y="558" text-anchor="start" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13.5" fill="#8b98a9">101</text>
+    <rect x="240" y="547" width="172" height="9" rx="2" fill="#f2777a" opacity="0.55"/>
+    <text x="430" y="558" text-anchor="start" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13.5" fill="#39d3bb">15</text>
+    <rect x="470" y="547" width="26" height="9" rx="2" fill="#3fb950"/>
+    <text x="1000" y="558" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13" fill="#f0b429">+0.45s</text>
+    <path d="M40 598 L1160 598" stroke="#26324a" stroke-width="1"/>
+    <text x="40" y="626" text-anchor="start" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#8b98a9">The lag column is the cost, not a rounding error: you learn a job finished up to one interval late, bounded by --max-poll-interval.</text>
+    <text x="40" y="648" text-anchor="start" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#8b98a9">Lower the ceiling if a pipeline needs latency more than it needs fewer round trips.</text>
+</svg>

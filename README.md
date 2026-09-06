@@ -18,6 +18,7 @@ A single `ai-job-gateway` job is one model call. A real creative pipeline is usu
 - Validates the pipeline is a genuine DAG at load time: unknown `depends_on` references and cycles are rejected before anything runs, not discovered mid-execution.
 - **Cross-checks every `steps.<name>` template reference against `depends_on`** at load time too (not just structural `depends_on` validity) — a step that reads another step's result without declaring that dependency is a real, silent bug (its actual execution order becomes accidental, dependent on what *other* deps happen to place it near), so it's now a load-time `PipelineError` naming exactly which step and which missing dependency, instead of a run that sometimes works and sometimes fails deep into execution.
 - Groups steps into **execution layers**: everything in one layer has no dependency on anything else in that layer, so the whole layer runs **concurrently**. Independent steps never wait on each other just because they happen to be listed one after another in the file.
+- **Paces that concurrency** rather than letting a layer's width become a burst: at most `--max-concurrent-steps` jobs are in flight at the gateway at once, and a job that keeps answering `processing` is polled progressively less often. See [Pacing](#pacing-what-a-layer-costs-the-gateway).
 - Lets a later step's params reference an **earlier step's result** via Jinja2: `{{ steps.generate.result.image_url }}`. A typo'd or not-yet-finished step reference is a loud render-time error (`StrictUndefined`), not a silently empty string.
 - Stops the pipeline (raising `PipelineRunError`) as soon as any step in a layer fails, while still surfacing every result already produced by earlier/same-layer steps (`partial_results`) — so you can see exactly how far it got.
 
@@ -87,6 +88,44 @@ after they finish, instead of the order being accidental
 error: step 'upscale' references unknown step(s) via 'steps.<name>...': 'generat' (did you mean 'generate'?)
 ```
 
+## Pacing: what a layer costs the gateway
+
+<img src="assets/pacing.svg" alt="Two bounds on what one execution layer costs the gateway. Top: a 40-step layer with no cap puts all 40 jobs in flight at once; with the default max_concurrent_steps of 10 the peak is 10 and all 40 steps still run, that number chosen to match ai-job-gateway's own webhook fan-out and to sit inside httpx's 20-connection keepalive pool. Bottom: poll counts measured at a 0.3 second base interval - a 3 second job goes from 11 polls to 8, 6 seconds from 21 to 10, 15 seconds from 51 to 12, and 30 seconds from 101 to 15 - at the cost of learning a job finished up to one interval late, between 0.34 and 1.13 seconds here and bounded by the 5 second ceiling." width="100%">
+
+A layer runs its steps concurrently, and until recently that was the whole
+story — which meant a layer's *width* was also its burst size. A 40-step
+fan-out submitted 40 jobs in the same event-loop tick (measured against the
+mock transport in `tests/test_runner.py`), then polled all 40 at a fixed
+interval until they finished. Two knobs bound that now, both on by default.
+
+**How many steps are in flight.** `--max-concurrent-steps` (default `10`)
+caps how many of a layer's jobs exist at the gateway at once. Every step
+still runs — the cap paces them, it never drops one — and a layer narrower
+than the cap is completely unaffected. `0` restores the old unbounded
+behaviour. The number matches `ai-job-gateway`'s own
+`DEFAULT_WEBHOOK_CONCURRENCY`, and sits inside httpx's 20-connection
+keepalive pool, so a wide layer reuses connections instead of opening a new
+one per step.
+
+**How often each one asks.** The poll interval starts at
+`--poll-interval` (default `0.3s`) and, once a job has been running for a
+second, grows by 1.5× per poll up to `--max-poll-interval` (default `5s`).
+A job that finishes quickly is never slowed down; a job that doesn't stops
+being asked twenty times a minute. Measured on the mock transport at the
+default `0.3s` base:
+
+| job takes | polls, flat | polls, backing off | detection lag |
+|---|---|---|---|
+| 3s | 11 | 8 | +0.34s |
+| 6s | 21 | 10 | +1.13s |
+| 15s | 51 | 12 | +0.52s |
+| 30s | 101 | 15 | +0.45s |
+
+The lag column is the honest cost: you learn a job finished up to one
+interval late, bounded by `--max-poll-interval`. That trade is worth naming
+rather than burying — if a pipeline needs tighter latency more than it needs
+fewer round trips, lower the ceiling.
+
 ## Library usage
 
 ```python
@@ -104,7 +143,7 @@ print(results["upscale"].result)
 uv run pytest -v
 ```
 
-59 tests as of this writing.
+72 tests as of this writing.
 
 ## Security
 
@@ -128,6 +167,8 @@ A pipeline file can come from somewhere other than the operator who's about to r
 - `depends_on` is explicit, not inferred from template references (see above) — but a `steps.<name>` reference **is now cross-checked against `depends_on`** at load time, so the two can no longer silently drift apart. Full auto-inference (deriving `depends_on` from template references instead of requiring both) was considered and deliberately deferred: it's a nicer authoring experience but removes the property that the DAG's shape is visible just from the `depends_on` lists, without parsing every template string.
 - No persistence — a pipeline run's state lives only in the process that ran `awe run`. There's no resume-from-where-it-failed yet; re-running re-executes every step from scratch.
 - The static `steps.<name>...` / `vars.<name>` reference scan (used by both the `depends_on` cross-check and `validate`'s "variables referenced" line) is best-effort: it recognizes the dotted-attribute form used throughout this project (`steps.generate.result.output`), not a dynamic/subscript form (`steps[some_var].result`). The latter isn't used anywhere in this project's own pipelines; the runtime `StrictUndefined` check still catches a real problem in that case, this is purely an early-warning layer on top.
+- Poll backoff is deterministic, not jittered. A wide layer's steps are submitted together, so their polls stay roughly in step with each other; `--max-concurrent-steps` is what actually spreads them out, and the gateway is a local server rather than a rate-limited third party. Jitter (as `ai-job-gateway` uses for its webhook retries) would be the next refinement if that stops being true.
+- The concurrency cap is per `run_pipeline` call, not per gateway. Two `awe run` processes against one gateway can still put 20 jobs in flight between them; a shared limit would need coordination this tool deliberately doesn't have.
 - No visual DAG rendering (`--dag | dot -Tsvg`, à la Snakemake) — `awe validate`'s layer listing is the closest thing today.
 
 ## License

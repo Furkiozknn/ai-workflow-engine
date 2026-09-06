@@ -8,7 +8,13 @@ import json
 import sys
 
 from .pipeline import PipelineError, execution_layers, load_pipeline, referenced_variables
-from .runner import PipelineRunError, run_pipeline
+from .runner import (
+    DEFAULT_MAX_CONCURRENT_STEPS,
+    DEFAULT_MAX_POLL_INTERVAL,
+    DEFAULT_POLL_INTERVAL,
+    PipelineRunError,
+    run_pipeline,
+)
 
 
 def _parse_var(raw: str) -> tuple[str, str]:
@@ -18,6 +24,19 @@ def _parse_var(raw: str) -> tuple[str, str]:
     if not key:
         raise argparse.ArgumentTypeError(f"--var must be KEY=VALUE, got {raw!r}")
     return key, value
+
+
+def _non_negative_int(raw: str) -> int:
+    """argparse type for a count that may be zero (meaning "no limit") but
+    never negative -- asyncio.Semaphore(-1) raises a ValueError that would
+    otherwise reach the user as a traceback."""
+    try:
+        value = int(raw)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"expected an integer, got {raw!r}")
+    if value < 0:
+        raise argparse.ArgumentTypeError(f"must be 0 (no limit) or more, got {value}")
+    return value
 
 
 def _cmd_validate(args: argparse.Namespace) -> None:
@@ -51,6 +70,8 @@ def _cmd_run(args: argparse.Namespace) -> None:
             variables=variables,
             timeout=args.timeout,
             poll_interval=args.poll_interval,
+            max_poll_interval=args.max_poll_interval,
+            max_concurrent_steps=args.max_concurrent_steps or None,
         )
 
     try:
@@ -82,7 +103,30 @@ def main() -> None:
     run_parser.add_argument("--gateway-url", required=True)
     run_parser.add_argument("--var", action="append", type=_parse_var, metavar="KEY=VALUE")
     run_parser.add_argument("--timeout", type=float, default=60.0, help="per-step timeout in seconds")
-    run_parser.add_argument("--poll-interval", type=float, default=0.3)
+    run_parser.add_argument(
+        "--poll-interval",
+        type=float,
+        default=DEFAULT_POLL_INTERVAL,
+        help="first wait between polls of a job, in seconds (default: %(default)s)",
+    )
+    run_parser.add_argument(
+        "--max-poll-interval",
+        type=float,
+        default=DEFAULT_MAX_POLL_INTERVAL,
+        help=(
+            "ceiling the poll interval backs off to for a job that keeps "
+            "reporting 'processing' (default: %(default)s)"
+        ),
+    )
+    run_parser.add_argument(
+        "--max-concurrent-steps",
+        type=_non_negative_int,
+        default=DEFAULT_MAX_CONCURRENT_STEPS,
+        help=(
+            "how many of a layer's steps may be in flight at the gateway at "
+            "once; 0 submits a whole layer at once (default: %(default)s)"
+        ),
+    )
     run_parser.set_defaults(func=_cmd_run)
 
     args = parser.parse_args()

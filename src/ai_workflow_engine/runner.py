@@ -5,6 +5,15 @@ step within one layer runs concurrently via ``asyncio.gather``, since by
 construction none of them depend on each other. A step's rendered result
 becomes available to every later layer's Jinja2 templates as
 ``steps.<name>.result``.
+
+Two things bound what that concurrency costs the gateway on the other end:
+
+* **How many steps are in flight** is capped by ``max_concurrent_steps``.
+  Without it a layer's width *is* the burst: a 40-step fan-out submitted 40
+  jobs in the same tick, measured on the mock transport.
+* **How often each in-flight step asks** backs off. A poll that keeps
+  answering "processing" is not worth repeating at the same rate forever;
+  see ``_next_poll_interval``.
 """
 
 from __future__ import annotations
@@ -27,6 +36,48 @@ from .gateway_poll import (
 )
 from .pipeline import Pipeline, execution_layers
 from .templating import TemplateRenderError, render_params
+
+
+#: First wait between polls of a submitted job. Deliberately short: most
+#: of the gateway's local capabilities finish almost immediately, and a
+#: pipeline that spends its first second sleeping feels broken.
+DEFAULT_POLL_INTERVAL = 0.3
+
+#: Ceiling the interval grows to. A job that has already run for a minute
+#: is not going to be meaningfully later for waiting five seconds more,
+#: and the alternative is another 16 pointless round trips.
+DEFAULT_MAX_POLL_INTERVAL = 5.0
+
+#: A job younger than this keeps being polled at the base interval, so a
+#: fast step still returns fast. Backoff only starts once the job has
+#: proven it is not one of those.
+POLL_BACKOFF_AFTER_SECONDS = 1.0
+
+#: Growth per poll once backoff starts. 1.5 rather than 2.0: reaching the
+#: ceiling in ~7 polls instead of ~4 keeps the interval closer to the
+#: actual completion time of a mid-length job.
+POLL_BACKOFF_FACTOR = 1.5
+
+#: How many of a layer's steps may be in flight at the gateway at once.
+#: Matches ai-job-gateway's own DEFAULT_WEBHOOK_CONCURRENCY, and sits
+#: inside httpx's 20-connection keepalive pool, so a wide layer reuses
+#: connections instead of churning a new one per step. ``None`` or 0
+#: restores the old unbounded behaviour.
+DEFAULT_MAX_CONCURRENT_STEPS = 10
+
+
+def _next_poll_interval(interval: float, elapsed: float, *, max_interval: float) -> float:
+    """The wait before the next poll of a job that has been running for
+    ``elapsed`` seconds and was last polled ``interval`` seconds ago.
+
+    Flat while the job is young, geometric to a ceiling after that. Note
+    that a zero interval stays zero -- growth is multiplicative on purpose,
+    so a caller that asks not to wait (the test suite, mostly) never starts
+    waiting halfway through a run.
+    """
+    if elapsed < POLL_BACKOFF_AFTER_SECONDS:
+        return interval
+    return min(max_interval, interval * POLL_BACKOFF_FACTOR)
 
 
 class PipelineRunError(Exception):
@@ -52,6 +103,7 @@ async def _run_step(
     http_client: httpx.AsyncClient,
     timeout: float,
     poll_interval: float,
+    max_poll_interval: float,
 ) -> Any:
     """Submit one job and poll it to completion. Returns the job's result,
     or raises PipelineRunError-friendly exceptions (caller attaches the
@@ -63,7 +115,9 @@ async def _run_step(
     except GatewayHTTPError as exc:
         raise RuntimeError(f"submission rejected ({exc.status_code}): {exc.body_text}") from exc
 
-    deadline = time.monotonic() + timeout
+    started = time.monotonic()
+    deadline = started + timeout
+    interval = poll_interval
     while True:
         poll_response = await http_client.get(resolve_polling_url(gateway_url, polling_url))
         if is_expired_poll_response(poll_response.status_code):
@@ -74,9 +128,21 @@ async def _run_step(
             return outcome.result
         if outcome.terminal:
             raise RuntimeError(outcome.error_message)
-        if time.monotonic() >= deadline:
+        now = time.monotonic()
+        if now >= deadline:
             raise RuntimeError(f"did not finish within {timeout}s (last status: {outcome.status!r})")
-        await asyncio.sleep(poll_interval)
+        interval = _next_poll_interval(interval, now - started, max_interval=max_poll_interval)
+        # Never sleep past the deadline: the run should report a timeout at
+        # the timeout, not one backoff step later.
+        await asyncio.sleep(min(interval, deadline - now))
+
+
+async def _run_step_bounded(slots: Optional[asyncio.Semaphore], *args: Any, **kwargs: Any) -> Any:
+    """``_run_step`` behind an optional concurrency gate."""
+    if slots is None:
+        return await _run_step(*args, **kwargs)
+    async with slots:
+        return await _run_step(*args, **kwargs)
 
 
 async def run_pipeline(
@@ -86,7 +152,9 @@ async def run_pipeline(
     variables: Optional[dict[str, Any]] = None,
     http_client: Optional[httpx.AsyncClient] = None,
     timeout: float = 60.0,
-    poll_interval: float = 0.3,
+    poll_interval: float = DEFAULT_POLL_INTERVAL,
+    max_poll_interval: float = DEFAULT_MAX_POLL_INTERVAL,
+    max_concurrent_steps: Optional[int] = DEFAULT_MAX_CONCURRENT_STEPS,
 ) -> dict[str, StepResult]:
     """Run every step of ``pipeline`` in dependency order. Returns a dict of
     every step's StepResult, keyed by step name - including steps that
@@ -97,6 +165,7 @@ async def run_pipeline(
     """
     client = http_client or httpx.AsyncClient()
     owns_client = http_client is None
+    slots = asyncio.Semaphore(max_concurrent_steps) if max_concurrent_steps else None
     variables = variables or {}
     base_url = gateway_url.rstrip("/")
 
@@ -113,13 +182,22 @@ async def run_pipeline(
                 except TemplateRenderError as exc:
                     return StepResult(name=step_name, status="error", error=f"template error: {exc}")
                 try:
-                    result = await _run_step(
+                    # Unlike ai-job-gateway's webhook semaphore -- which is
+                    # released across the retry sleep so a backing-off
+                    # delivery cannot starve the others -- this slot is held
+                    # for the whole step, submission through polling. The
+                    # slot *is* the in-flight-job budget; handing it back
+                    # while the job is still running at the gateway would
+                    # cap nothing.
+                    result = await _run_step_bounded(
+                        slots,
                         base_url,
                         step.capability,
                         rendered,
                         http_client=client,
                         timeout=timeout,
                         poll_interval=poll_interval,
+                        max_poll_interval=max_poll_interval,
                     )
                 except Exception as exc:  # noqa: BLE001 - deliberately broad, see model-comparison-harness's identical choice
                     return StepResult(name=step_name, status="error", error=str(exc))

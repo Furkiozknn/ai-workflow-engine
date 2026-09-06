@@ -29,6 +29,8 @@ uv sync --group dev
 
 ## Pipeline file format
 
+<img src="assets/validation.svg" alt="Everything load_pipeline rejects at parse time: malformed YAML, a missing name or steps list, a step without a capability, duplicate step names, a depends_on entry naming a step that does not exist, a cycle reported as the path that closes it, and a template referencing a step missing from its depends_on. Only a graph that passes is split into concurrent execution layers." width="100%">
+
 ```yaml
 name: generate-and-upscale
 steps:
@@ -119,6 +121,8 @@ A pipeline file can come from somewhere other than the operator who's about to r
 - `steps[].capability` is not restricted to an allowlist — a pipeline can invoke any capability the target gateway exposes. That's unchanged and, for now, considered part of "a pipeline file is trusted the same as code that calls the gateway directly."
 
 ## Roadmap / known v1 limitations
+
+<img src="assets/failure.svg" alt="Failure semantics: layer 0 succeeds and its results are kept, a step in layer 1 raises and the run stops there with PipelineRunError carrying the failing step and every result collected so far, and layer 2 never starts - no skipped status is invented for it." width="100%">
 
 - No retry policy per step — a failed step fails the whole run. Retries are a natural v2 addition once real (non-mock) providers surface which failures are worth retrying automatically.
 - `depends_on` is explicit, not inferred from template references (see above) — but a `steps.<name>` reference **is now cross-checked against `depends_on`** at load time, so the two can no longer silently drift apart. Full auto-inference (deriving `depends_on` from template references instead of requiring both) was considered and deliberately deferred: it's a nicer authoring experience but removes the property that the DAG's shape is visible just from the `depends_on` lists, without parsing every template string.

@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 552" width="1200" height="552" role="img" aria-label="Validation happens at load: a malformed YAML file, a step with no capability, a duplicate name, a dependency on a step that does not exist, a cycle, or a template referencing a step missing from its depends_on all raise PipelineError before any job is submitted. Only a graph that passes is split into execution layers, each layer running concurrently.">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0d1117"/>
+      <stop offset="55%" stop-color="#0f1f24"/>
+      <stop offset="100%" stop-color="#0b1a20"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#39d3bb"/>
+      <stop offset="50%" stop-color="#4c8dff"/>
+      <stop offset="100%" stop-color="#a371f7"/>
+    </linearGradient>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#8b98a9"/>
+    </marker>
+  </defs>
+  <rect width="1200" height="552" fill="url(#bg)"/>
+  <rect x="0" y="0" width="1200" height="4" fill="url(#accent)"/>
+  <text x="40" y="56" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="24" font-weight="700" fill="#e6edf3">rejected before a single job is submitted</text>
+  <text x="40" y="84" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif" font-size="14.5" fill="#8b98a9">load_pipeline() refuses a bad graph at parse time, so a broken pipeline never burns provider time finding out</text>
+    <rect x="40" y="118" width="190" height="56" rx="12" fill="#131a26" stroke="#8b98a9" stroke-width="1.6"/>
+    <text x="135" y="151" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="14" font-weight="700" fill="#8b98a9">pipeline.yaml</text>
+    <path d="M230 146 L288 146" stroke="#8b98a9" stroke-width="1.8" fill="none" marker-end="url(#arrow)"/>
+    <rect x="288" y="118" width="190" height="56" rx="12" fill="#131a26" stroke="#6cb6ff" stroke-width="1.6"/>
+    <text x="383" y="151" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="14" font-weight="700" fill="#6cb6ff">load_pipeline()</text>
+    <path d="M478 132 L536 118" stroke="#f2777a" stroke-width="1.8" fill="none" marker-end="url(#arrow)"/>
+    <path d="M478 160 L536 176" stroke="#3fb950" stroke-width="1.8" fill="none" marker-end="url(#arrow)"/>
+    <rect x="40" y="210" width="620" height="302" rx="14" fill="#131a26" stroke="#f2777a" stroke-width="1.6"/>
+    <text x="62" y="242" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="15" font-weight="700" fill="#f2777a">PipelineError, at load</text>
+    <path d="M62 254 L638 254" stroke="#26324a" stroke-width="1"/>
+    <circle cx="70" cy="275" r="3.5" fill="#f2777a"/>
+    <text x="86" y="280" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#e6edf3">top level is not a YAML mapping, or the YAML is malformed</text>
+    <circle cx="70" cy="305" r="3.5" fill="#f2777a"/>
+    <text x="86" y="310" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#e6edf3">no non-empty name, or no non-empty steps list</text>
+    <circle cx="70" cy="335" r="3.5" fill="#f2777a"/>
+    <text x="86" y="340" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#e6edf3">a step with no name, no capability, or duplicate names</text>
+    <circle cx="70" cy="365" r="3.5" fill="#f2777a"/>
+    <text x="86" y="370" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#e6edf3">params or depends_on of the wrong shape</text>
+    <circle cx="70" cy="395" r="3.5" fill="#f2777a"/>
+    <text x="86" y="400" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#e6edf3">depends_on naming a step that does not exist</text>
+    <circle cx="70" cy="425" r="3.5" fill="#f2777a"/>
+    <text x="86" y="430" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#e6edf3">a cycle - reported as the path that closes it</text>
+    <circle cx="70" cy="455" r="3.5" fill="#f2777a"/>
+    <text x="86" y="460" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#e6edf3">a template referencing a step that is not in its depends_on,</text>
+    <text x="86" y="490" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#8b98a9">even when that step would happen to land in an earlier layer</text>
+    <rect x="700" y="210" width="460" height="212" rx="14" fill="#131a26" stroke="#3fb950" stroke-width="1.6"/>
+    <text x="722" y="242" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="15" font-weight="700" fill="#3fb950">only then: execution layers</text>
+    <path d="M722 254 L1138 254" stroke="#26324a" stroke-width="1"/>
+    <circle cx="730" cy="275" r="3.5" fill="#3fb950"/>
+    <text x="746" y="280" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#e6edf3">layer 0 - every step with no unmet dependency,</text>
+    <text x="746" y="310" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#8b98a9">run concurrently via asyncio.gather</text>
+    <circle cx="730" cy="335" r="3.5" fill="#3fb950"/>
+    <text x="746" y="340" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#e6edf3">layer 1 - waits for layer 0, sees its results</text>
+    <text x="746" y="370" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#8b98a9">as template variables</text>
+    <circle cx="730" cy="395" r="3.5" fill="#3fb950"/>
+    <text x="746" y="400" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#e6edf3">layer 2 - and so on, until the graph is drained</text>
+    <text x="700" y="456" text-anchor="start" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#8b98a9">Concurrency is the graph's shape, not a</text>
+    <text x="700" y="476" text-anchor="start" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#8b98a9">setting anyone has to tune.</text>
+</svg>

@@ -5,6 +5,10 @@ from pathlib import Path
 import pytest
 
 from ai_workflow_engine.cli import main
+from ai_workflow_engine.runner import (
+    DEFAULT_MAX_CONCURRENT_STEPS,
+    DEFAULT_MAX_POLL_INTERVAL,
+)
 
 PIPELINE_YAML = """
 name: cli-test
@@ -110,3 +114,59 @@ def test_var_flag_parsing_rejects_missing_equals(tmp_path: Path, monkeypatch, ca
 
     with pytest.raises(SystemExit):
         _run(monkeypatch, ["run", str(pipeline_file), "--gateway-url", "http://gw.test", "--var", "no-equals-sign"])
+
+
+def _capture_run_pipeline_kwargs(monkeypatch, tmp_path: Path, extra_argv):
+    """Run `awe run` with run_pipeline stubbed out, and return the kwargs it
+    was called with. The flags are only worth having if they reach the
+    runner; parsing them into a Namespace nobody reads is the failure mode
+    this guards."""
+    pipeline_file = tmp_path / "pipeline.yaml"
+    pipeline_file.write_text(PIPELINE_YAML)
+    seen = {}
+
+    async def fake_run_pipeline(pipeline, gateway_url, **kwargs):
+        seen.update(kwargs)
+        return {}
+
+    monkeypatch.setattr("ai_workflow_engine.cli.run_pipeline", fake_run_pipeline)
+    _run(monkeypatch, ["run", str(pipeline_file), "--gateway-url", "http://gw.test", *extra_argv])
+    return seen
+
+
+def test_run_passes_pacing_flags_through_to_the_runner(tmp_path: Path, monkeypatch, capsys):
+    seen = _capture_run_pipeline_kwargs(
+        monkeypatch,
+        tmp_path,
+        ["--poll-interval", "0.7", "--max-poll-interval", "12", "--max-concurrent-steps", "3"],
+    )
+    assert seen["poll_interval"] == 0.7
+    assert seen["max_poll_interval"] == 12.0
+    assert seen["max_concurrent_steps"] == 3
+
+
+def test_run_defaults_to_the_bounded_pacing(tmp_path: Path, monkeypatch, capsys):
+    seen = _capture_run_pipeline_kwargs(monkeypatch, tmp_path, [])
+    assert seen["max_concurrent_steps"] == DEFAULT_MAX_CONCURRENT_STEPS
+    assert seen["max_poll_interval"] == DEFAULT_MAX_POLL_INTERVAL
+
+
+def test_max_concurrent_steps_zero_means_unbounded(tmp_path: Path, monkeypatch, capsys):
+    # argparse gives 0; the runner's opt-out is None. The CLI has to make
+    # that translation or --max-concurrent-steps 0 would cap the layer at
+    # zero steps and hang.
+    seen = _capture_run_pipeline_kwargs(monkeypatch, tmp_path, ["--max-concurrent-steps", "0"])
+    assert seen["max_concurrent_steps"] is None
+
+
+def test_negative_max_concurrent_steps_is_rejected_by_the_parser(tmp_path: Path, monkeypatch, capsys):
+    # asyncio.Semaphore(-1) raises "initial value must be >= 0"; the user
+    # should see an argparse message, not that traceback.
+    pipeline_file = tmp_path / "pipeline.yaml"
+    pipeline_file.write_text(PIPELINE_YAML)
+    with pytest.raises(SystemExit):
+        _run(
+            monkeypatch,
+            ["run", str(pipeline_file), "--gateway-url", "http://gw.test", "--max-concurrent-steps", "-1"],
+        )
+    assert "0 (no limit) or more" in capsys.readouterr().err

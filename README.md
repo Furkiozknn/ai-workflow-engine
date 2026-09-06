@@ -1,3 +1,5 @@
+![ai-workflow-engine - a pipeline is a plain YAML DAG in git, validated before it runs](assets/banner.svg)
+
 # ai-workflow-engine
 
 **A pipeline is a plain YAML file that runs your generate → upscale → lip-sync chain as a DAG — checked into git, not built in a visual editor.**

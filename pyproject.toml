@@ -3,10 +3,31 @@ name = "ai-workflow-engine"
 version = "0.1.0"
 description = "A small DAG orchestrator that chains ai-job-gateway-compatible jobs (generate -> upscale -> lip-sync, etc.) defined as a YAML pipeline."
 readme = "README.md"
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.11"
 authors = [
     { name = "Furkiozkann" },
+]
+keywords = [
+    "dag",
+    "pipeline",
+    "yaml",
+    "orchestration",
+    "generative-ai",
+    "workflow",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: System :: Distributed Computing",
 ]
 dependencies = [
     "httpx>=0.27.0",

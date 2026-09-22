@@ -64,3 +64,24 @@ jobs:
             exit 1
           fi
           echo "sozlesme testleri gercekten kostu
+
+  vendor:
+    name: gateway_poll.py kaynagiyla ayni mi
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # Bu dosya ai-job-gateway'den kopyalandi. Kopyalamak bilincli bir karar:
+      # dort projeden hicbiri digerine bagimli olmak zorunda kalmiyor. Ama
+      # kopyalar sessizce ayrisir -- birinde duzeltilen bir sinir durumu
+      # digerlerinde durmaya devam eder ve her depo kendi kopyasina karsi
+      # yesil kalir. Betik ag yoksa ATLIYOR, gecmiyor (cikis 2).
+      - name: Kanonik kopyayla karsilastir
+        run: |
+          set -eu
+          kod=0
+          python3 arac/vendor-dogrula.py || kod=$?
+          case "$kod" in
+            0) echo "ayni" ;;
+            2) echo "::warning::kanonik kopyaya bakilamadi; bu adim bir sey kanitlamadi" ;;
+            *) exit "$kod" ;;
+          esac

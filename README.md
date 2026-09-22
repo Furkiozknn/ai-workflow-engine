@@ -208,6 +208,23 @@ A pipeline file can come from somewhere other than the operator who's about to r
 - The concurrency cap is per `run_pipeline` call, not per gateway. Two `awe run` processes against one gateway can still put 20 jobs in flight between them; a shared limit would need coordination this tool deliberately doesn't have.
 - No visual DAG rendering (`--dag | dot -Tsvg`, à la Snakemake) — `awe validate`'s layer listing is the closest thing today.
 
+### `gateway_poll.py` is not ours
+
+That module is copied verbatim from
+[ai-job-gateway](https://github.com/Furkiozknn/ai-job-gateway), which owns the submit/poll
+contract. Copying is deliberate — this project does not have to depend on the gateway — but
+copies drift in silence: an edge case fixed upstream keeps biting here, and this repository
+stays green against its own stale copy the whole time.
+
+```sh
+python3 arac/vendor-dogrula.py
+```
+
+It fetches the canonical file from `main`, normalises the package-name difference and fails on
+anything else, printing the diff. With no network it **skips rather than passes** — "I could
+not look" and "they are identical" are different facts, and a gate that conflates them is not
+a gate. CI runs it on every push.
+
 ## License
 
 MIT

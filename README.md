@@ -4,6 +4,10 @@
 
 **A pipeline is a plain YAML file that runs your generate → upscale → lip-sync chain as a DAG — checked into git, not built in a visual editor.**
 
+![awe validating a two-step pipeline into two layers, then rejecting a copy whose depends_on says genarate](assets/demo.gif)
+
+<sub>Real output. The second file differs from the first by one typo in <code>depends_on</code>; it never reaches a gateway, because the DAG is resolved at load time.</sub>
+
 A small DAG orchestrator that chains [`ai-job-gateway`](https://github.com/Furkiozknn/ai-job-gateway)-compatible jobs (generate → upscale → lip-sync, ...) defined as a YAML pipeline. The generalization of ComfyUI's "the graph is a durable, shareable artifact" lesson (see the research in [`Furkiozknn/Furkiozknn`](https://github.com/Furkiozknn/Furkiozknn)'s architecture doc), minus the visual node editor — a pipeline here is a plain YAML file, git-diffable like code.
 
 Part of the same small ecosystem as [`ai-job-gateway`](https://github.com/Furkiozknn/ai-job-gateway), [`prompt-template-manager`](https://github.com/Furkiozknn/prompt-template-manager), [`model-comparison-harness`](https://github.com/Furkiozknn/model-comparison-harness), and [`asset-provenance-toolkit`](https://github.com/Furkiozknn/asset-provenance-toolkit) — coupled only through documented HTTP contracts, never through a shared Python dependency. Vendors the same [`gateway_poll.py`](https://github.com/Furkiozknn/ai-job-gateway/blob/main/src/ai_job_gateway/gateway_poll.py) module as the other three.

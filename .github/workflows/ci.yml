@@ -50,20 +50,19 @@ jobs:
           uv sync --group dev
           uv pip install "git+https://github.com/Furkiozknn/ai-job-gateway@main"
 
+      # Tek kosu, iki kontrol. Test dosyasi gateway kurulu degilse kendini
+      # atliyor -- bu, elindeki gateway olmayan bir katkiciyi engellememek
+      # icin dogru davranis, ama BURADA olmasi isin hicbir sey olcmedigi
+      # anlamina gelir. O yuzden hem cikis kodu hem de "skipped" araniyor.
       - name: Sozlesme testleri
-        run: uv run pytest tests/test_gercek_gateway.py -v
-
-      # Test dosyasi gateway yoksa kendini atliyor; o atlamanin BURADA
-      # gerceklesmesi, isin hicbir sey olcmedigi anlamina gelir.
-      - name: Atlanmadigini dogrula
         run: |
-          set -eu
-          uv run pytest tests/test_gercek_gateway.py -q 2>&1 | tee /tmp/out.txt
-          if grep -qE '[0-9]+ skipped' /tmp/out.txt; then
+          set -euo pipefail
+          uv run pytest tests/test_gercek_gateway.py -v 2>&1 | tee /tmp/sozlesme.txt
+          if grep -qE '[0-9]+ skipped' /tmp/sozlesme.txt; then
             echo "sozlesme testleri atlandi: gateway kurulmamis, bu is bir sey olcmedi"
             exit 1
           fi
-          echo "sozlesme testleri gercekten kostu
+          echo "sozlesme testleri gercekten kostu"
 
   vendor:
     name: gateway_poll.py kaynagiyla ayni mi

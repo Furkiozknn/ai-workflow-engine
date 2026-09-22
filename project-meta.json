@@ -49,9 +49,10 @@
     "videos": []
   },
   "tests": {
-    "count": 72,
-    "source": "`72 passed`",
-    "measured": "2026-09-15"
+    "count": 80,
+    "framework": "pytest",
+    "command": "uv run pytest -q",
+    "evidence": "80 passed"
   },
   "ci": {
     "workflows": [

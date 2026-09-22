@@ -147,7 +147,40 @@ print(results["upscale"].result)
 uv run pytest -v
 ```
 
-72 tests as of this writing.
+80 tests as of this writing.
+
+### Against the real gateway, not against our idea of it
+
+Everything above runs against `_fake_gateway()` — a handwritten `MockTransport`
+that returns what *we believe* ai-job-gateway returns. That fake is the risk.
+It encodes one reading of the contract, it was written once, and nothing tells
+it when the gateway changes: a renamed field, a new status value, a different
+envelope, and these tests stay green while the pair stops working. Two projects
+that advertise compatibility cannot prove it by each mocking the other.
+
+`tests/test_gercek_gateway.py` runs the **actual** gateway. ai-job-gateway
+exposes `create_app(manager)`, this engine accepts an injected `http_client`,
+and `httpx.ASGITransport` connects them in-process — no server, no port, no
+container, no network. A real submit, a real background provider run, real
+polling until ready.
+
+```sh
+uv pip install "git+https://github.com/Furkiozknn/ai-job-gateway@main"
+uv run pytest tests/test_gercek_gateway.py -v
+```
+
+Writing it immediately found drift. The real gateway emits `status: "pending"`
+before it emits `"processing"`; the fake never produces `pending` at all.
+`gateway_poll.py` handles it correctly — anything that is not `ready`, `error`
+or `expired` means keep polling — but that branch was never exercised by any
+test in this repository. It is now, deliberately against the slow provider,
+because with the echo provider the job is already `ready` on the first poll and
+the not-yet-finished path goes unrun.
+
+The file skips itself when ai-job-gateway is not installed, so working on the
+engine alone is not blocked. CI installs it from `main` and then **fails if the
+tests skipped**, because a contract job that quietly measured nothing is worse
+than no job at all.
 
 ## Security
 

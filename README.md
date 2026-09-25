@@ -4,6 +4,10 @@
 
 **A pipeline is a plain YAML file that runs your generate → upscale → lip-sync chain as a DAG — checked into git, not built in a visual editor.**
 
+![awe validating a two-step pipeline into two layers, then rejecting a copy whose depends_on says genarate](assets/demo.gif)
+
+<sub>Real output. The second file differs from the first by one typo in <code>depends_on</code>; it never reaches a gateway, because the DAG is resolved at load time.</sub>
+
 A small DAG orchestrator that chains [`ai-job-gateway`](https://github.com/Furkiozknn/ai-job-gateway)-compatible jobs (generate → upscale → lip-sync, ...) defined as a YAML pipeline. The generalization of ComfyUI's "the graph is a durable, shareable artifact" lesson (see the research in [`Furkiozknn/Furkiozknn`](https://github.com/Furkiozknn/Furkiozknn)'s architecture doc), minus the visual node editor — a pipeline here is a plain YAML file, git-diffable like code.
 
 Part of the same small ecosystem as [`ai-job-gateway`](https://github.com/Furkiozknn/ai-job-gateway), [`prompt-template-manager`](https://github.com/Furkiozknn/prompt-template-manager), [`model-comparison-harness`](https://github.com/Furkiozknn/model-comparison-harness), and [`asset-provenance-toolkit`](https://github.com/Furkiozknn/asset-provenance-toolkit) — coupled only through documented HTTP contracts, never through a shared Python dependency. Vendors the same [`gateway_poll.py`](https://github.com/Furkiozknn/ai-job-gateway/blob/main/src/ai_job_gateway/gateway_poll.py) module as the other three.
@@ -143,7 +147,40 @@ print(results["upscale"].result)
 uv run pytest -v
 ```
 
-72 tests as of this writing.
+80 tests as of this writing.
+
+### Against the real gateway, not against our idea of it
+
+Everything above runs against `_fake_gateway()` — a handwritten `MockTransport`
+that returns what *we believe* ai-job-gateway returns. That fake is the risk.
+It encodes one reading of the contract, it was written once, and nothing tells
+it when the gateway changes: a renamed field, a new status value, a different
+envelope, and these tests stay green while the pair stops working. Two projects
+that advertise compatibility cannot prove it by each mocking the other.
+
+`tests/test_gercek_gateway.py` runs the **actual** gateway. ai-job-gateway
+exposes `create_app(manager)`, this engine accepts an injected `http_client`,
+and `httpx.ASGITransport` connects them in-process — no server, no port, no
+container, no network. A real submit, a real background provider run, real
+polling until ready.
+
+```sh
+uv pip install "git+https://github.com/Furkiozknn/ai-job-gateway@main"
+uv run pytest tests/test_gercek_gateway.py -v
+```
+
+Writing it immediately found drift. The real gateway emits `status: "pending"`
+before it emits `"processing"`; the fake never produces `pending` at all.
+`gateway_poll.py` handles it correctly — anything that is not `ready`, `error`
+or `expired` means keep polling — but that branch was never exercised by any
+test in this repository. It is now, deliberately against the slow provider,
+because with the echo provider the job is already `ready` on the first poll and
+the not-yet-finished path goes unrun.
+
+The file skips itself when ai-job-gateway is not installed, so working on the
+engine alone is not blocked. CI installs it from `main` and then **fails if the
+tests skipped**, because a contract job that quietly measured nothing is worse
+than no job at all.
 
 ## Security
 
@@ -171,6 +208,34 @@ A pipeline file can come from somewhere other than the operator who's about to r
 - The concurrency cap is per `run_pipeline` call, not per gateway. Two `awe run` processes against one gateway can still put 20 jobs in flight between them; a shared limit would need coordination this tool deliberately doesn't have.
 - No visual DAG rendering (`--dag | dot -Tsvg`, à la Snakemake) — `awe validate`'s layer listing is the closest thing today.
 
+### `gateway_poll.py` is not ours
+
+That module is copied verbatim from
+[ai-job-gateway](https://github.com/Furkiozknn/ai-job-gateway), which owns the submit/poll
+contract. Copying is deliberate — this project does not have to depend on the gateway — but
+copies drift in silence: an edge case fixed upstream keeps biting here, and this repository
+stays green against its own stale copy the whole time.
+
+```sh
+python3 arac/vendor-dogrula.py
+```
+
+It fetches the canonical file from `main`, normalises the package-name difference and fails on
+anything else, printing the diff. With no network it **skips rather than passes** — "I could
+not look" and "they are identical" are different facts, and a gate that conflates them is not
+a gate. CI runs it on every push.
+
 ## License
 
 MIT
+
+---
+
+## More from this ecosystem
+
+- **[ai-job-gateway](https://github.com/Furkiozknn/ai-job-gateway)** — the async job contract the rest of the pipeline speaks
+- **[prompt-template-manager](https://github.com/Furkiozknn/prompt-template-manager)** — prompts as YAML in git, rendered by a strict engine
+- **[model-comparison-harness](https://github.com/Furkiozknn/model-comparison-harness)** — one request, N backends, latency and outcome side by side
+- **[mcp-vet](https://github.com/Furkiozknn/mcp-vet)** — audits an MCP server's source before you install it
+
+<sub>All of them in one searchable page: **[furkiozknn.github.io](https://furkiozknn.github.io/)** — each card is generated from that repository's own <code>project-meta.json</code>.</sub>

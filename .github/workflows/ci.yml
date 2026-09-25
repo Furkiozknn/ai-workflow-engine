@@ -13,18 +13,43 @@ concurrency:
 
 jobs:
   test:
+    name: test (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    # pyproject.toml soz veriyor: 3.11, 3.12, 3.13. Tek bir surumde kosan CI
+    # digerleri icin hicbir sey kanitlamiyor -- tomllib/typing farki gibi bir
+    # kirilma ancak kullanicida gorunurdu.
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    env:
+      UV_PYTHON: ${{ matrix.python-version }}
     steps:
       - uses: actions/checkout@v7
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
 
+      # --locked: uv.lock pyproject.toml'la uyusmuyorsa burada kirmizi yanar,
+      # sessizce yeniden cozulmez.
       - name: Install dependencies
-        run: uv sync --group dev
+        run: uv sync --locked --group dev
 
       - name: Run tests
         run: uv run pytest -v
+
+  # Yayin is akisi paketi yalniz etiket itildiginde kuruyor; paketlemeyi
+  # bozan bir degisiklik ancak yayin gunu fark edilirdi. twine>=7: hatchling
+  # 1.32 Metadata-Version 2.5 uretiyor ve twine 6.x bunu "gecersiz" diye
+  # reddediyor (yerelde olculdu), yani eski bir twine burada yanlis kirmizi verir.
+  paket:
+    name: paketle ve twine check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+      - run: uv build
+      - run: uvx --from 'twine>=7' twine check --strict dist/*
 
   # Bu motorun testlerinin tamami, ai-job-gateway'in ne dondugune dair BIZIM
   # inancimizi kodlayan elle yazilmis bir sahteye karsi kosuyor. O sahte tek

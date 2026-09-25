@@ -15,7 +15,7 @@ Ekosistem: **python**
 ```
 git clone https://github.com/Furkiozknn/ai-workflow-engine.git
 cd ai-workflow-engine
-uv sync --group dev          # CI de tam olarak bunu calistiriyor
+uv sync --locked --group dev # CI de tam olarak bunu calistiriyor
 ```
 
 `uv` yoksa ([kurulum](https://docs.astral.sh/uv/getting-started/installation/)),

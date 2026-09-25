@@ -89,3 +89,15 @@ def test_find_references_walk_nested_dicts_and_lists():
     params = {"outer": {"list": ["{{ steps.a.result.x }}", "{{ vars.y }}"]}}
     assert find_step_references(params) == {"a"}
     assert find_var_references(params) == {"y"}
+
+
+def test_find_required_var_references_skips_guarded_optional_vars():
+    from ai_workflow_engine.templating import find_required_var_references
+
+    params = {
+        "prompt": "{{ vars.subject }}",
+        "style": "{{ vars.style | default('plain') }}",
+        "seed": "{% if vars.seed is defined %}{{ vars.seed }}{% endif %}",
+        "nested": ["{{ vars.size.width }}"],
+    }
+    assert find_required_var_references(params) == {"subject", "size"}

@@ -18,7 +18,7 @@ from typing import Any
 
 import yaml
 
-from .templating import find_step_references, find_var_references
+from .templating import find_required_var_references, find_step_references, find_var_references
 
 # gateway_poll.submit_url builds the request as f"{base_url}/v1/{capability}"
 # with no encoding or escaping - an unrestricted capability string is a
@@ -88,10 +88,17 @@ class Pipeline:
 
 def load_pipeline(path: str | Path) -> Pipeline:
     """Load and validate a pipeline from a YAML file."""
+    # UTF-8 explicitly: YAML is UTF-8 by spec, and the locale default would
+    # make the same file load on one machine and fail (or turn into mojibake)
+    # on another -- cp1252 on stock Windows, ASCII under LC_ALL=C.
     try:
-        text = Path(path).read_text()
+        text = Path(path).read_text(encoding="utf-8")
     except FileNotFoundError as exc:
         raise PipelineError(f"no such file: {path}") from exc
+    except UnicodeDecodeError as exc:
+        raise PipelineError(f"{path} is not valid UTF-8 text: {exc}") from exc
+    except OSError as exc:
+        raise PipelineError(f"cannot read {path}: {exc.strerror or exc}") from exc
     return parse_pipeline_str(text)
 
 
@@ -100,6 +107,10 @@ def parse_pipeline_str(text: str) -> Pipeline:
         data = yaml.load(text, Loader=_NoAliasSafeLoader)
     except yaml.YAMLError as exc:
         raise PipelineError(f"invalid YAML: {exc}") from exc
+    except RecursionError as exc:
+        # PyYAML's composer recurses once per nesting level, so a few KB of
+        # '[' would otherwise escape as a bare traceback.
+        raise PipelineError("invalid YAML: structure is nested too deeply") from exc
     if not isinstance(data, dict):
         raise PipelineError("pipeline file must contain a YAML mapping at the top level")
     return parse_pipeline(data)
@@ -220,29 +231,50 @@ def referenced_variables(pipeline: Pipeline) -> set[str]:
     return refs
 
 
+def required_variables(pipeline: Pipeline) -> set[str]:
+    """The subset of ``referenced_variables`` a run cannot do without: every
+    ``vars.<name>`` used in a template string that does not also guard it
+    with ``| default(...)`` or ``is defined``. `awe run` checks these before
+    submitting anything, so a missing ``--var`` fails the run up front
+    instead of after the layers that didn't need it already ran.
+    """
+    refs: set[str] = set()
+    for step in pipeline.steps:
+        refs |= find_required_var_references(step.params)
+    return refs
+
+
 def _check_acyclic(pipeline: Pipeline) -> None:
     """Raise PipelineError if the depends_on graph has a cycle.
 
-    Plain DFS with a recursion-stack set - the graph is expected to be
-    small (a handful to a few dozen steps), so this doesn't need to be
-    more clever than that.
+    Iterative DFS with an explicit stack: a recursive one crashed with
+    RecursionError on a dependency chain longer than Python's recursion
+    limit (~1000 steps) when it happened to be listed last-step-first.
+    The stack doubles as the current path, so a cycle is still reported
+    step by step.
     """
     WHITE, GRAY, BLACK = 0, 1, 2
-    color = {step.name: WHITE for step in pipeline.steps}
+    deps = {step.name: step.depends_on for step in pipeline.steps}
+    color = {name: WHITE for name in deps}
 
-    def visit(name: str, path: list[str]) -> None:
-        color[name] = GRAY
-        for dep in pipeline.step(name).depends_on:
-            if color[dep] == GRAY:
-                cycle = " -> ".join(path + [dep])
+    for root in deps:
+        if color[root] != WHITE:
+            continue
+        color[root] = GRAY
+        path = [root]
+        stack = [iter(deps[root])]
+        while stack:
+            dep = next(stack[-1], None)
+            if dep is None:
+                color[path.pop()] = BLACK
+                stack.pop()
+            elif color[dep] == GRAY:
+                cycle = " -> ".join(path[path.index(dep):] + [dep])
                 raise PipelineError(f"cycle detected in pipeline dependencies: {cycle}")
-            if color[dep] == WHITE:
-                visit(dep, path + [dep])
-        color[name] = BLACK
-
-    for step in pipeline.steps:
-        if color[step.name] == WHITE:
-            visit(step.name, [step.name])
+            elif color[dep] == WHITE:
+                color[dep] = GRAY
+                path.append(dep)
+                stack.append(iter(deps[dep]))
 
 
 def execution_layers(pipeline: Pipeline) -> list[list[str]]:

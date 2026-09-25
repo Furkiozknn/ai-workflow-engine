@@ -170,3 +170,64 @@ def test_negative_max_concurrent_steps_is_rejected_by_the_parser(tmp_path: Path,
             ["run", str(pipeline_file), "--gateway-url", "http://gw.test", "--max-concurrent-steps", "-1"],
         )
     assert "0 (no limit) or more" in capsys.readouterr().err
+
+
+def test_run_with_a_missing_var_fails_before_submitting_anything(tmp_path: Path, monkeypatch, capsys):
+    # Layer 0 needs no variable, layer 1 does. Without a pre-flight check
+    # the run submitted (and paid for) layer 0, then died on layer 1's
+    # template with "'dict object' has no attribute 'image'".
+    pipeline_file = tmp_path / "pipeline.yaml"
+    pipeline_file.write_text(
+        """
+name: late-var
+steps:
+  - name: generate
+    capability: gen
+    params:
+      prompt: fixed
+  - name: caption
+    capability: cap
+    params:
+      source: "{{ steps.generate.result.output }}"
+      lang: "{{ vars.lang }}"
+      tone: "{{ vars.tone | default('neutral') }}"
+    depends_on: [generate]
+"""
+    )
+    called = []
+
+    async def fake_run_pipeline(*args, **kwargs):
+        called.append(True)
+        return {}
+
+    monkeypatch.setattr("ai_workflow_engine.cli.run_pipeline", fake_run_pipeline)
+    with pytest.raises(SystemExit) as exc_info:
+        _run(monkeypatch, ["run", str(pipeline_file), "--gateway-url", "http://gw.test"])
+    assert exc_info.value.code == 1
+    err = capsys.readouterr().err
+    assert "--var lang=" in err
+    assert "tone" not in err
+    assert called == []
+
+
+def test_run_with_every_required_var_supplied_proceeds(tmp_path: Path, monkeypatch, capsys):
+    pipeline_file = tmp_path / "pipeline.yaml"
+    pipeline_file.write_text(
+        'name: v\nsteps:\n  - name: a\n    capability: echo\n    params: {p: "{{ vars.lang }}"}\n'
+    )
+    seen = {}
+
+    async def fake_run_pipeline(pipeline, gateway_url, **kwargs):
+        seen.update(kwargs)
+        return {}
+
+    monkeypatch.setattr("ai_workflow_engine.cli.run_pipeline", fake_run_pipeline)
+    _run(monkeypatch, ["run", str(pipeline_file), "--gateway-url", "http://gw.test", "--var", "lang=tr"])
+    assert seen["variables"] == {"lang": "tr"}
+
+
+def test_validate_a_directory_is_an_error_not_a_traceback(tmp_path: Path, monkeypatch, capsys):
+    with pytest.raises(SystemExit) as exc_info:
+        _run(monkeypatch, ["validate", str(tmp_path)])
+    assert exc_info.value.code == 1
+    assert "error:" in capsys.readouterr().err

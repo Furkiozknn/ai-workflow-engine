@@ -25,3 +25,62 @@ jobs:
 
       - name: Run tests
         run: uv run pytest -v
+
+  # Bu motorun testlerinin tamami, ai-job-gateway'in ne dondugune dair BIZIM
+  # inancimizi kodlayan elle yazilmis bir sahteye karsi kosuyor. O sahte tek
+  # bir okumayi donduruyor ve gateway degistiginde kimse ona haber vermiyor:
+  # yeniden adlandirilmis bir alan, yeni bir durum degeri, farkli bir zarf --
+  # testler yesil kalir, ikili calismayi birakir.
+  #
+  # Bu is GERCEK gateway'i kuruyor ve ayni testleri ona karsi kosuyor.
+  # Sunucu yok, port yok, konteyner yok: gateway'in create_app'i httpx'in
+  # ASGITransport'una baglaniyor, her sey tek surecte.
+  sozlesme:
+    name: gercek ai-job-gateway ile sozlesme
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+
+      # Ana daldan: sozlesmenin BUGUN ne oldugunu olcmek istiyoruz, yayinlanmis
+      # bir surumun ne oldugunu degil. Bir kirilma burada, tuketen tarafta
+      # gorunmeli -- tek aci verdigi yer orasi.
+      - name: Gercek ai-job-gateway'i kur
+        run: |
+          uv sync --group dev
+          uv pip install "git+https://github.com/Furkiozknn/ai-job-gateway@main"
+
+      # Tek kosu, iki kontrol. Test dosyasi gateway kurulu degilse kendini
+      # atliyor -- bu, elindeki gateway olmayan bir katkiciyi engellememek
+      # icin dogru davranis, ama BURADA olmasi isin hicbir sey olcmedigi
+      # anlamina gelir. O yuzden hem cikis kodu hem de "skipped" araniyor.
+      - name: Sozlesme testleri
+        run: |
+          set -euo pipefail
+          uv run pytest tests/test_gercek_gateway.py -v 2>&1 | tee /tmp/sozlesme.txt
+          if grep -qE '[0-9]+ skipped' /tmp/sozlesme.txt; then
+            echo "sozlesme testleri atlandi: gateway kurulmamis, bu is bir sey olcmedi"
+            exit 1
+          fi
+          echo "sozlesme testleri gercekten kostu"
+
+  vendor:
+    name: gateway_poll.py kaynagiyla ayni mi
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # Bu dosya ai-job-gateway'den kopyalandi. Kopyalamak bilincli bir karar:
+      # dort projeden hicbiri digerine bagimli olmak zorunda kalmiyor. Ama
+      # kopyalar sessizce ayrisir -- birinde duzeltilen bir sinir durumu
+      # digerlerinde durmaya devam eder ve her depo kendi kopyasina karsi
+      # yesil kalir. Betik ag yoksa ATLIYOR, gecmiyor (cikis 2).
+      - name: Kanonik kopyayla karsilastir
+        run: |
+          set -eu
+          kod=0
+          python3 arac/vendor-dogrula.py || kod=$?
+          case "$kod" in
+            0) echo "ayni" ;;
+            2) echo "::warning::kanonik kopyaya bakilamadi; bu adim bir sey kanitlamadi" ;;
+            *) exit "$kod" ;;
+          esac

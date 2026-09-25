@@ -147,7 +147,7 @@ print(results["upscale"].result)
 uv run pytest -v
 ```
 
-80 tests as of this writing.
+80 tests as of this writing. Eight of them are the contract tests below, which need the real ai-job-gateway installed; without it, `uv run pytest` reports `72 passed, 1 skipped` — the skip names the missing package, and it is expected.
 
 ### Against the real gateway, not against our idea of it
 

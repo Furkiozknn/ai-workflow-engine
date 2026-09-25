@@ -71,5 +71,5 @@
     </g>
   </g>
 
-  <text x="178" y="272" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="14" fill="#5c6b7f">59 tests &#183; cycles + undeclared deps rejected at load &#183; e2e against a live gateway &#183; MIT</text>
+  <text x="178" y="272" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="14" fill="#5c6b7f">91 tests &#183; cycles + undeclared deps rejected at load &#183; e2e against a live gateway &#183; MIT</text>
 </svg>

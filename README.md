@@ -28,9 +28,16 @@ A single `ai-job-gateway` job is one model call. A real creative pipeline is usu
 
 ## Install
 
+Not on PyPI yet — run it from a checkout with [uv](https://docs.astral.sh/uv/) (Python 3.11+):
+
 ```bash
+git clone https://github.com/Furkiozknn/ai-workflow-engine
+cd ai-workflow-engine
 uv sync --group dev
+uv run awe validate examples/generate-and-upscale.yaml
 ```
+
+`uv run awe ...` works without activating anything; after `source .venv/bin/activate` the commands below work as plain `awe ...`. Actually *running* a pipeline needs an [`ai-job-gateway`](https://github.com/Furkiozknn/ai-job-gateway) server to submit jobs to; `validate` needs nothing.
 
 ## Pipeline file format
 
@@ -92,6 +99,15 @@ after they finish, instead of the order being accidental
 error: step 'upscale' references unknown step(s) via 'steps.<name>...': 'generat' (did you mean 'generate'?)
 ```
 
+`awe run` also checks, before submitting a single job, that every `vars.<name>` the pipeline needs was passed with `--var`. Without that, a variable used only by a later layer failed that layer's template after the earlier layers had already run — jobs submitted, time spent. A variable guarded in its template with `| default(...)` or `is defined` counts as optional and is not demanded:
+
+```
+$ awe run examples/local-media-chain.yaml --gateway-url http://localhost:8000
+error: pipeline needs variable(s) not supplied: image (pass --var image=...)
+```
+
+A pipeline path that is a directory, unreadable, or not UTF-8 is likewise a one-line `error:` and exit code 1, not a traceback. Pipeline files are always read as UTF-8, whatever the machine's locale.
+
 ## Pacing: what a layer costs the gateway
 
 <img src="assets/pacing.svg" alt="Two bounds on what one execution layer costs the gateway. Top: a 40-step layer with no cap puts all 40 jobs in flight at once; with the default max_concurrent_steps of 10 the peak is 10 and all 40 steps still run, that number chosen to match ai-job-gateway's own webhook fan-out and to sit inside httpx's 20-connection keepalive pool. Bottom: poll counts measured at a 0.3 second base interval - a 3 second job goes from 11 polls to 8, 6 seconds from 21 to 10, 15 seconds from 51 to 12, and 30 seconds from 101 to 15 - at the cost of learning a job finished up to one interval late, between 0.34 and 1.13 seconds here and bounded by the 5 second ceiling." width="100%">
@@ -147,7 +163,7 @@ print(results["upscale"].result)
 uv run pytest -v
 ```
 
-80 tests as of this writing. Eight of them are the contract tests below, which need the real ai-job-gateway installed; without it, `uv run pytest` reports `72 passed, 1 skipped` — the skip names the missing package, and it is expected.
+91 tests as of this writing. Eight of them are the contract tests below, which need the real ai-job-gateway installed; without it, `uv run pytest` reports `83 passed, 1 skipped` — the skip names the missing package, and it is expected. CI runs the suite on Python 3.11, 3.12 and 3.13, and builds the package and runs `twine check` on every push.
 
 ### Against the real gateway, not against our idea of it
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from ai_workflow_engine.pipeline import PipelineError, execution_layers, parse_pipeline, parse_pipeline_str
+from ai_workflow_engine.pipeline import PipelineError, execution_layers, load_pipeline, parse_pipeline, parse_pipeline_str
 
 
 def _minimal(steps):
@@ -236,3 +236,39 @@ steps:
 """
     with pytest.raises(PipelineError, match="anchor/alias"):
         parse_pipeline_str(src)
+
+
+# A pipeline file is YAML, and YAML is UTF-8 -- but Path.read_text() with no
+# encoding decodes with the *locale* encoding. On a Turkish Windows machine
+# that is cp1254: a prompt like "kırmızı" loads without error as mojibake
+# and is sent to the gateway that way. An ASCII locale makes the same
+# mistake loud (UnicodeDecodeError traceback), which is how this is pinned.
+_NON_ASCII_PIPELINE = 'name: p\nsteps:\n  - name: gen\n    capability: echo\n    params:\n      prompt: "kırmızı ayakkabı"\n'
+
+
+def test_load_pipeline_reads_utf8_regardless_of_locale(tmp_path):
+    import os
+    import subprocess
+    import sys
+
+    pipeline_file = tmp_path / "tr.yaml"
+    pipeline_file.write_bytes(_NON_ASCII_PIPELINE.encode("utf-8"))
+    env = {**os.environ, "LC_ALL": "C", "LANG": "C", "PYTHONUTF8": "0", "PYTHONCOERCECLOCALE": "0"}
+    code = (
+        "import sys; from ai_workflow_engine.pipeline import load_pipeline; "
+        "p = load_pipeline(sys.argv[1]).steps[0].params['prompt']; "
+        "print(p.encode('utf-8').hex())"
+    )
+    proc = subprocess.run(
+        [sys.executable, "-c", code, str(pipeline_file)], env=env, capture_output=True, text=True
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert bytes.fromhex(proc.stdout.strip()).decode("utf-8") == "kırmızı ayakkabı"
+
+
+def test_load_pipeline_non_utf8_file_is_pipeline_error(tmp_path):
+    pipeline_file = tmp_path / "latin1.yaml"
+    # Saved from an editor set to Latin-1: not valid UTF-8, so not valid YAML.
+    pipeline_file.write_bytes(_NON_ASCII_PIPELINE.replace("kırmızı ayakkabı", "café").encode("latin-1"))
+    with pytest.raises(PipelineError, match="UTF-8"):
+        load_pipeline(pipeline_file)

@@ -2,6 +2,9 @@
 
 # ai-workflow-engine
 
+<p align="center"><img src="docs/reel/reel.gif" alt="ai-workflow-engine - 15-second motion reel" width="720"></p>
+<p align="center"><sub><a href="docs/reel/reel.mp4">MP4 version with sound</a></sub></p>
+
 **A pipeline is a plain YAML file that runs your generate → upscale → lip-sync chain as a DAG — checked into git, not built in a visual editor.**
 
 ![awe validating a two-step pipeline into two layers, then rejecting a copy whose depends_on says genarate](assets/demo.gif)

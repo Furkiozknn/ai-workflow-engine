@@ -88,10 +88,15 @@ class Pipeline:
 
 def load_pipeline(path: str | Path) -> Pipeline:
     """Load and validate a pipeline from a YAML file."""
+    # Explicit UTF-8, not the locale default: YAML files are UTF-8, and on a
+    # Turkish Windows machine the locale is cp1254, which decodes "kırmızı"
+    # without complaint into mojibake that then gets sent to the gateway.
     try:
-        text = Path(path).read_text()
+        text = Path(path).read_text(encoding="utf-8")
     except FileNotFoundError as exc:
         raise PipelineError(f"no such file: {path}") from exc
+    except UnicodeDecodeError as exc:
+        raise PipelineError(f"{path} is not valid UTF-8 (save the pipeline file as UTF-8): {exc}") from exc
     return parse_pipeline_str(text)
 
 

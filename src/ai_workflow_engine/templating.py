@@ -64,7 +64,23 @@ def _render_value(value: Any, context: dict[str, Any]) -> Any:
     return value
 
 
-def _find_root_attr_refs(value: Any, root_name: str) -> set[str]:
+#: Filters/tests under which an undefined value renders fine even with
+#: StrictUndefined -- a ``vars.<name>`` inside one of them is optional.
+_GUARDS = {"default", "d", "defined", "undefined"}
+
+
+def _root_attr(node: Any, root_name: str) -> str | None:
+    """``name`` if ``node`` is a ``<root_name>.name[.more...]`` chain."""
+    chain: list[str] = []
+    while isinstance(node, nodes.Getattr):
+        chain.append(node.attr)
+        node = node.node
+    if isinstance(node, nodes.Name) and node.name == root_name and chain:
+        return chain[-1]
+    return None
+
+
+def _find_root_attr_refs(value: Any, root_name: str, *, skip_guarded: bool = False) -> set[str]:
     """Best-effort static scan of a params tree for every
     ``<root_name>.<name>...`` reference (e.g. every ``steps.generate...`` or
     every ``vars.prompt``), without resolving or executing anything. Used
@@ -85,14 +101,19 @@ def _find_root_attr_refs(value: Any, root_name: str) -> set[str]:
             ast = _ENV.parse(source)
         except Exception:  # noqa: BLE001 - a syntax error is reported at render time, not here
             return
+        found: set[str] = set()
         for getattr_node in ast.find_all(nodes.Getattr):
-            chain: list[str] = []
-            cur: Any = getattr_node
-            while isinstance(cur, nodes.Getattr):
-                chain.append(cur.attr)
-                cur = cur.node
-            if isinstance(cur, nodes.Name) and cur.name == root_name and chain:
-                refs.add(chain[-1])
+            name = _root_attr(getattr_node, root_name)
+            if name is not None:
+                found.add(name)
+        if skip_guarded:
+            # A name guarded anywhere in this string is optional for all of
+            # it: ``{{ vars.x if vars.x is defined else 'y' }}`` renders
+            # fine without x, although its first ``vars.x`` is unguarded.
+            for guard in ast.find_all((nodes.Filter, nodes.Test)):
+                if guard.name in _GUARDS:
+                    found.discard(_root_attr(guard.node, root_name))
+        refs.update(found)
 
     def _walk(v: Any) -> None:
         if isinstance(v, str):
@@ -116,3 +137,10 @@ def find_step_references(params: dict[str, Any]) -> set[str]:
 def find_var_references(params: dict[str, Any]) -> set[str]:
     """Every variable name referenced anywhere in ``params`` via ``vars.<name>...``."""
     return _find_root_attr_refs(params, "vars")
+
+
+def find_required_var_references(params: dict[str, Any]) -> set[str]:
+    """Like ``find_var_references``, minus every variable a template string
+    guards with ``| default(...)`` / ``is defined`` -- the names a render
+    would fail on if the caller did not supply them."""
+    return _find_root_attr_refs(params, "vars", skip_guarded=True)

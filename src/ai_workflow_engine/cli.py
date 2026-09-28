@@ -7,7 +7,13 @@ import asyncio
 import json
 import sys
 
-from .pipeline import PipelineError, execution_layers, load_pipeline, referenced_variables
+from .pipeline import (
+    PipelineError,
+    execution_layers,
+    load_pipeline,
+    referenced_variables,
+    required_variables,
+)
 from .runner import (
     DEFAULT_MAX_CONCURRENT_STEPS,
     DEFAULT_MAX_POLL_INTERVAL,
@@ -62,6 +68,15 @@ def _cmd_run(args: argparse.Namespace) -> None:
         raise SystemExit(1)
 
     variables = dict(args.var or [])
+
+    # Checked before anything is submitted: without this, a variable only a
+    # later layer uses fails that layer's template after the earlier layers
+    # have already run -- jobs submitted, time and quota spent.
+    missing = sorted(required_variables(pipeline) - variables.keys())
+    if missing:
+        flags = " ".join(f"--var {name}=..." for name in missing)
+        print(f"error: pipeline needs variable(s) not supplied: {', '.join(missing)} (pass {flags})", file=sys.stderr)
+        raise SystemExit(1)
 
     async def _go() -> dict:
         return await run_pipeline(

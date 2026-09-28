@@ -33,7 +33,7 @@
     "workflow-engine",
     "yaml"
   ],
-  "summary": "A pipeline is a plain YAML DAG in git, not a diagram in a visual editor - and it is validated before it runs. A step that reads another step's result without declaring the dependency is rejected at load time, typo and all. Layers run concurrently, capped and backed off so width never becomes a burst. 72 tests.",
+  "summary": "A pipeline is a plain YAML DAG in git, not a diagram in a visual editor - and it is validated before it runs. A step that reads another step's result without declaring the dependency is rejected at load time, typo and all. Layers run concurrently, capped and backed off so width never becomes a burst. 91 tests.",
   "key_features": [
     "A pipeline is a plain YAML DAG in git, not a diagram in a visual editor",
     "Validated before it runs: a step reading another step's result without declaring the dependency is rejected at load time, typo and all",
@@ -49,10 +49,10 @@
     "videos": []
   },
   "tests": {
-    "count": 80,
+    "count": 91,
     "framework": "pytest",
     "command": "uv run pytest -q",
-    "evidence": "80 passed"
+    "evidence": "83 passed, 1 skipped without ai-job-gateway installed; the skipped module is the 8 contract tests, which CI runs against the real gateway"
   },
   "ci": {
     "workflows": [
@@ -63,7 +63,7 @@
   },
   "docs": {
     "readme": "README.md",
-    "changelog": null,
+    "changelog": "CHANGELOG.md",
     "version_history": null,
     "roadmap": null,
     "security": "SECURITY.md",

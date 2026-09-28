@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from ai_workflow_engine.pipeline import PipelineError, execution_layers, parse_pipeline, parse_pipeline_str
+from ai_workflow_engine.pipeline import PipelineError, execution_layers, load_pipeline, parse_pipeline, parse_pipeline_str
 
 
 def _minimal(steps):
@@ -307,3 +307,13 @@ def test_long_cycle_is_still_reported_with_its_path():
     steps = [{"name": f"s{i}", "capability": "x", "depends_on": [f"s{(i + 1) % n}"]} for i in range(n)]
     with pytest.raises(PipelineError, match=r"cycle detected in pipeline dependencies: s0 -> s1 -> .* -> s0$"):
         parse_pipeline(_minimal(steps))
+
+
+def test_load_pipeline_latin1_file_is_a_pipeline_error(tmp_path):
+    pipeline_file = tmp_path / "latin1.yaml"
+    # Saved from an editor set to Latin-1: not valid UTF-8, so not valid YAML.
+    pipeline_file.write_bytes(
+        'name: p\nsteps:\n  - name: gen\n    capability: echo\n    params:\n      prompt: "café"\n'.encode("latin-1")
+    )
+    with pytest.raises(PipelineError, match="UTF-8"):
+        load_pipeline(pipeline_file)

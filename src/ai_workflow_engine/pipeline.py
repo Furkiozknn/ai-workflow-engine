@@ -90,13 +90,14 @@ def load_pipeline(path: str | Path) -> Pipeline:
     """Load and validate a pipeline from a YAML file."""
     # UTF-8 explicitly: YAML is UTF-8 by spec, and the locale default would
     # make the same file load on one machine and fail (or turn into mojibake)
-    # on another -- cp1252 on stock Windows, ASCII under LC_ALL=C.
+    # on another -- cp1252 on stock Windows, ASCII under LC_ALL=C,
+    # cp1254 on a Turkish Windows machine.
     try:
         text = Path(path).read_text(encoding="utf-8")
     except FileNotFoundError as exc:
         raise PipelineError(f"no such file: {path}") from exc
     except UnicodeDecodeError as exc:
-        raise PipelineError(f"{path} is not valid UTF-8 text: {exc}") from exc
+        raise PipelineError(f"{path} is not valid UTF-8 (save the pipeline file as UTF-8): {exc}") from exc
     except OSError as exc:
         raise PipelineError(f"cannot read {path}: {exc.strerror or exc}") from exc
     return parse_pipeline_str(text)

@@ -2,6 +2,9 @@
 
 # ai-workflow-engine
 
+<p align="center"><img src="docs/reel/reel.gif" alt="ai-workflow-engine - 15-second motion reel" width="720"></p>
+<p align="center"><sub><a href="docs/reel/reel.mp4">MP4 version with sound</a></sub></p>
+
 **A pipeline is a plain YAML file that runs your generate → upscale → lip-sync chain as a DAG — checked into git, not built in a visual editor.**
 
 ![awe validating a two-step pipeline into two layers, then rejecting a copy whose depends_on says genarate](assets/demo.gif)
@@ -163,7 +166,7 @@ print(results["upscale"].result)
 uv run pytest -v
 ```
 
-91 tests as of this writing. Eight of them are the contract tests below, which need the real ai-job-gateway installed; without it, `uv run pytest` reports `83 passed, 1 skipped` — the skip names the missing package, and it is expected. CI runs the suite on Python 3.11, 3.12 and 3.13, and builds the package and runs `twine check` on every push.
+92 tests as of this writing. Eight of them are the contract tests below, which need the real ai-job-gateway installed; without it, `uv run pytest` reports `84 passed, 1 skipped` — the skip names the missing package, and it is expected. CI runs the suite on Python 3.11, 3.12 and 3.13, and builds the package and runs `twine check` on every push.
 
 ### Against the real gateway, not against our idea of it
 

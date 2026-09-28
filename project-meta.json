@@ -49,10 +49,9 @@
     "videos": []
   },
   "tests": {
-    "count": 91,
-    "framework": "pytest",
-    "command": "uv run pytest -q",
-    "evidence": "83 passed, 1 skipped without ai-job-gateway installed; the skipped module is the 8 contract tests, which CI runs against the real gateway"
+    "count": 92,
+    "source": "CI log: 84 suite (`84 passed, 1 skipped`) + 8 cross-repo contract job (`8 passed`); CI splits them, so no single line prints 92",
+    "measured": "2026-09-28"
   },
   "ci": {
     "workflows": [

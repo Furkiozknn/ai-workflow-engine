@@ -1,0 +1,27 @@
+# A pipeline that needs no key, no account and no model: it uses the two local
+# stand-in capabilities every ai-job-gateway server has (`mock-generate`, `echo`).
+#
+#   uvx --from git+https://github.com/Furkiozknn/ai-job-gateway ai-job-gateway serve
+#   awe run examples/mock-chain.yaml --gateway-url http://127.0.0.1:8000 --var prompt="a cat"
+#
+# `draft` and `note` share no data, so they run concurrently (layer 0);
+# `publish` waits for both and reads their results (layer 1).
+# The output of `draft` is a mock string, not a generated image.
+name: mock-chain
+steps:
+  - name: draft
+    capability: mock-generate
+    params:
+      prompt: "{{ vars.prompt }}"
+
+  - name: note
+    capability: echo
+    params:
+      text: "{{ vars.prompt }}"
+
+  - name: publish
+    capability: echo
+    params:
+      source: "{{ steps.draft.result.output }}"
+      note: "{{ steps.note.result.echoed.text }}"
+    depends_on: [draft, note]

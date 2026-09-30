@@ -30,7 +30,9 @@ _CAPABILITY_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
 class PipelineError(Exception):
-    pass
+    """The pipeline file is not a valid DAG (bad YAML, missing field, unknown
+    or cyclic ``depends_on``, undeclared ``steps.<name>`` reference...).
+    The message says which step and how to fix it."""
 
 
 class _NoAliasSafeLoader(yaml.SafeLoader):
@@ -65,6 +67,9 @@ class _NoAliasSafeLoader(yaml.SafeLoader):
 
 @dataclass
 class Step:
+    """One job submission: ``capability`` + ``params`` (strings in ``params``
+    are Jinja2 templates), run after every step named in ``depends_on``."""
+
     name: str
     capability: str
     params: dict[str, Any]
@@ -73,6 +78,8 @@ class Step:
 
 @dataclass
 class Pipeline:
+    """A named list of steps, already checked to be a DAG."""
+
     name: str
     steps: list[Step]
 
@@ -96,6 +103,13 @@ def load_pipeline(path: str | Path) -> Pipeline:
         text = Path(path).read_text(encoding="utf-8")
     except FileNotFoundError as exc:
         raise PipelineError(f"no such file: {path}") from exc
+    except IsADirectoryError as exc:
+        raise PipelineError(f"cannot read {path}: it is a directory, not a pipeline file") from exc
+    except PermissionError as exc:
+        # Windows raises PermissionError (not IsADirectoryError) for a directory.
+        if Path(path).is_dir():
+            raise PipelineError(f"cannot read {path}: it is a directory, not a pipeline file") from exc
+        raise PipelineError(f"cannot read {path}: {exc.strerror or exc}") from exc
     except UnicodeDecodeError as exc:
         raise PipelineError(f"{path} is not valid UTF-8 (save the pipeline file as UTF-8): {exc}") from exc
     except OSError as exc:
@@ -104,6 +118,7 @@ def load_pipeline(path: str | Path) -> Pipeline:
 
 
 def parse_pipeline_str(text: str) -> Pipeline:
+    """Parse and validate pipeline YAML given as a string (see ``load_pipeline``)."""
     try:
         data = yaml.load(text, Loader=_NoAliasSafeLoader)
     except yaml.YAMLError as exc:
@@ -162,7 +177,9 @@ def parse_pipeline(data: dict[str, Any]) -> Pipeline:
     for step in steps:
         for dep in step.depends_on:
             if dep not in known:
-                raise PipelineError(f"step {step.name!r} depends on unknown step {dep!r}")
+                raise PipelineError(
+                    f"step {step.name!r} depends on unknown step {_describe_unknown_step(dep, sorted(known))}"
+                )
             if dep == step.name:
                 raise PipelineError(f"step {step.name!r} cannot depend on itself")
 

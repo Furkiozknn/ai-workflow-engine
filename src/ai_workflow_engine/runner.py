@@ -81,18 +81,67 @@ def _next_poll_interval(interval: float, elapsed: float, *, max_interval: float)
 
 
 class PipelineRunError(Exception):
+    """A step failed; the run stopped at the end of its layer.
+
+    ``step_name`` is the first failed step and ``partial_results`` (a dict of
+    :class:`StepResult` keyed by step name) holds everything that finished
+    before the run stopped, including the failed step itself.
+    """
+
     def __init__(self, step_name: str, message: str) -> None:
         self.step_name = step_name
         self.message = message
         super().__init__(f"step {step_name!r} failed: {message}")
 
 
+class GatewayCheckError(Exception):
+    """Raised before any job is submitted when the gateway cannot be reached,
+    or does not offer a capability the pipeline uses. Nothing has run."""
+
+
 @dataclass
 class StepResult:
+    """One step's outcome: ``status`` is ``"ready"`` (``result`` holds the
+    job's result) or ``"error"`` (``error`` holds the message)."""
+
     name: str
     status: str  # "ready" or "error"
     result: Optional[Any] = None
     error: Optional[str] = None
+
+
+async def check_gateway(pipeline: Pipeline, gateway_url: str, client: httpx.AsyncClient) -> None:
+    """Fail before the first job if the gateway is unreachable or lacks a capability.
+
+    Asks ``GET /v1/capabilities`` once. An unreachable gateway and a capability
+    the gateway does not offer are ``GatewayCheckError``; a server that has no
+    such endpoint (any other answer) is not an error -- the check is skipped,
+    since it is only an early warning and other gateways may not have it.
+    """
+    base = gateway_url.rstrip("/")
+    try:
+        response = await client.get(f"{base}/v1/capabilities")
+    except (httpx.TransportError, httpx.InvalidURL) as exc:
+        detail = str(exc) or type(exc).__name__
+        raise GatewayCheckError(
+            f"cannot reach the gateway at {gateway_url} ({detail}); "
+            "is it running? e.g. `ai-job-gateway serve` (default http://127.0.0.1:8000)"
+        ) from exc
+    if response.status_code != 200:
+        return
+    try:
+        offered = response.json()
+    except ValueError:
+        return
+    if not isinstance(offered, dict):
+        return
+    missing = sorted({s.capability for s in pipeline.steps} - offered.keys())
+    if missing:
+        raise GatewayCheckError(
+            f"the gateway at {gateway_url} does not offer capability {', '.join(map(repr, missing))}; "
+            f"it offers: {', '.join(sorted(offered)) or '(none)'} "
+            f"(see {base}/v1/capabilities)"
+        )
 
 
 async def _run_step(
@@ -155,6 +204,7 @@ async def run_pipeline(
     poll_interval: float = DEFAULT_POLL_INTERVAL,
     max_poll_interval: float = DEFAULT_MAX_POLL_INTERVAL,
     max_concurrent_steps: Optional[int] = DEFAULT_MAX_CONCURRENT_STEPS,
+    check_capabilities: bool = False,
 ) -> dict[str, StepResult]:
     """Run every step of ``pipeline`` in dependency order. Returns a dict of
     every step's StepResult, keyed by step name - including steps that
@@ -162,6 +212,11 @@ async def run_pipeline(
     used; instead PipelineRunError is raised as soon as a layer contains a
     failure, with the successful results from prior layers preserved on
     the exception's ``partial_results`` attribute for inspection).
+
+    ``check_capabilities=True`` first calls :func:`check_gateway` (what
+    ``awe run`` does) and raises :class:`GatewayCheckError` before any job is
+    submitted. It is off by default so library callers keep exactly one
+    request per job.
     """
     client = http_client or httpx.AsyncClient()
     owns_client = http_client is None
@@ -173,6 +228,8 @@ async def run_pipeline(
     steps_context: dict[str, Any] = {}
 
     try:
+        if check_capabilities:
+            await check_gateway(pipeline, gateway_url, client)
         for layer in execution_layers(pipeline):
 
             async def run_one(step_name: str) -> StepResult:

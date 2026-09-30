@@ -33,7 +33,7 @@
     "workflow-engine",
     "yaml"
   ],
-  "summary": "A pipeline is a plain YAML DAG in git, not a diagram in a visual editor - and it is validated before it runs. A step that reads another step's result without declaring the dependency is rejected at load time, typo and all. Layers run concurrently, capped and backed off so width never becomes a burst. 91 tests.",
+  "summary": "A pipeline is a plain YAML DAG in git, not a diagram in a visual editor - and it is validated before it runs. A step that reads another step's result without declaring the dependency is rejected at load time, typo and all. Layers run concurrently, capped and backed off so width never becomes a burst. 106 tests.",
   "key_features": [
     "A pipeline is a plain YAML DAG in git, not a diagram in a visual editor",
     "Validated before it runs: a step reading another step's result without declaring the dependency is rejected at load time, typo and all",
@@ -43,15 +43,13 @@
   "media": {
     "hero": "assets/banner.svg",
     "screenshots": [],
-    "gifs": [
-      "assets/demo.gif"
-    ],
+    "gifs": [],
     "videos": []
   },
   "tests": {
-    "count": 92,
-    "source": "CI log: 84 suite (`84 passed, 1 skipped`) + 8 cross-repo contract job (`8 passed`); CI splits them, so no single line prints 92",
-    "measured": "2026-09-28"
+    "count": 106,
+    "source": "local run 2026-09-30: `97 passed, 1 skipped` without ai-job-gateway; `106 passed` with ai-job-gateway main installed (97 + 9 contract tests)",
+    "measured": "2026-09-30"
   },
   "ci": {
     "workflows": [

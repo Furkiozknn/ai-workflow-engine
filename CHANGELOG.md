@@ -32,6 +32,17 @@ First release. Everything below is on `main`; no tag or PyPI upload exists yet.
 - A failing layer stops the run with `PipelineRunError`, keeping earlier
   results on `partial_results`.
 
+### Command line
+- `awe run` asks the gateway what it offers before submitting anything: an
+  unreachable gateway, or a capability it does not have, is one `error:` line
+  and exit 1 with no job sent. A gateway without `/v1/capabilities` skips the
+  check. Library: `run_pipeline(..., check_capabilities=True)`, off by default.
+- `--help` has a description, examples, exit codes and text for every
+  argument; `awe --version`. A `depends_on` typo suggests the real step name;
+  `awe validate <directory>` says it is a directory.
+- `examples/mock-chain.yaml`: a pipeline for the gateway's built-in
+  `mock-generate`/`echo`, no key needed.
+
 ### Project
 - CI: tests on Python 3.11, 3.12 and 3.13 with a locked install, a package
   build + `twine check`, contract tests against the real `ai-job-gateway`,

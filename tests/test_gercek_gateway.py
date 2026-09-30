@@ -229,3 +229,16 @@ async def test_poll_yaniti_status_alanini_tasiyor(gercek_gateway):
     # gateway_poll.py onu dogru isliyor (terminal degil, beklemeye devam),
     # ama o dal yalnizca burada kosuluyor.
     assert "pending" in gorulen or "processing" in gorulen, gorulen
+
+
+@pytest.mark.asyncio
+async def test_on_kontrol_gercek_gatewayin_yetenek_listesini_okuyor(gercek_gateway):
+    """`check_gateway` reads GET /v1/capabilities as the real gateway sends it
+    (a name -> provider mapping), so a missing capability is caught before any
+    job exists and a present one passes."""
+    from ai_workflow_engine.runner import GatewayCheckError, check_gateway
+
+    await check_gateway(_boru(TEK_ADIM), "http://gw.test", gercek_gateway)
+    yok = _boru(TEK_ADIM.replace("capability: generate", "capability: olmayan"))
+    with pytest.raises(GatewayCheckError, match="olmayan"):
+        await check_gateway(yok, "http://gw.test", gercek_gateway)

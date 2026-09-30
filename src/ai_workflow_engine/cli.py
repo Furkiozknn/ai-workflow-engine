@@ -14,8 +14,10 @@ from .pipeline import (
     referenced_variables,
     required_variables,
 )
+from . import __version__
 from .runner import (
     DEFAULT_MAX_CONCURRENT_STEPS,
+    GatewayCheckError,
     DEFAULT_MAX_POLL_INTERVAL,
     DEFAULT_POLL_INTERVAL,
     PipelineRunError,
@@ -87,10 +89,14 @@ def _cmd_run(args: argparse.Namespace) -> None:
             poll_interval=args.poll_interval,
             max_poll_interval=args.max_poll_interval,
             max_concurrent_steps=args.max_concurrent_steps or None,
+            check_capabilities=True,
         )
 
     try:
         results = asyncio.run(_go())
+    except GatewayCheckError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        raise SystemExit(1)
     except PipelineRunError as exc:
         print(f"error: {exc}", file=sys.stderr)
         partial = getattr(exc, "partial_results", {})
@@ -106,18 +112,60 @@ def _cmd_run(args: argparse.Namespace) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(prog="awe", description="ai-workflow-engine")
-    subparsers = parser.add_subparsers(dest="command", required=True)
+    parser = argparse.ArgumentParser(
+        prog="awe",
+        description=(
+            "Run a chain of ai-job-gateway jobs described in a YAML file.\n"
+            "The file is a DAG: it is checked in full (typos, cycles, undeclared\n"
+            "step references) before any job is submitted."
+        ),
+        epilog=(
+            "examples:\n"
+            "  awe validate examples/mock-chain.yaml\n"
+            "  awe run examples/mock-chain.yaml --gateway-url http://127.0.0.1:8000 --var prompt='a cat'\n"
+            "\n"
+            "'run' needs an ai-job-gateway server; 'validate' needs nothing.\n"
+            "Exit code: 0 ok, 1 the pipeline or a step failed, 2 bad command line."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument("--version", action="version", version=f"awe {__version__}")
+    subparsers = parser.add_subparsers(dest="command", required=True, metavar="{validate,run}")
 
-    validate_parser = subparsers.add_parser("validate", help="validate a pipeline file's structure and DAG")
-    validate_parser.add_argument("file")
+    validate_parser = subparsers.add_parser(
+        "validate",
+        help="check a pipeline file and print its execution layers (runs nothing)",
+        description="Check a pipeline file: YAML, DAG, depends_on and template references. Runs nothing, needs no gateway.",
+    )
+    validate_parser.add_argument("file", help="path to the pipeline YAML file")
     validate_parser.set_defaults(func=_cmd_validate)
 
-    run_parser = subparsers.add_parser("run", help="run a pipeline against a gateway server")
-    run_parser.add_argument("file")
-    run_parser.add_argument("--gateway-url", required=True)
-    run_parser.add_argument("--var", action="append", type=_parse_var, metavar="KEY=VALUE")
-    run_parser.add_argument("--timeout", type=float, default=60.0, help="per-step timeout in seconds")
+    run_parser = subparsers.add_parser(
+        "run",
+        help="run a pipeline against an ai-job-gateway server",
+        description=(
+            "Run a pipeline: submit each step to the gateway, layer by layer, and print every step's "
+            "{status, result, error} as JSON on stdout. Before the first job it checks that the "
+            "gateway is reachable and offers every capability the pipeline uses."
+        ),
+    )
+    run_parser.add_argument("file", help="path to the pipeline YAML file")
+    run_parser.add_argument(
+        "--gateway-url",
+        required=True,
+        metavar="URL",
+        help="base URL of the ai-job-gateway server, e.g. http://127.0.0.1:8000",
+    )
+    run_parser.add_argument(
+        "--var",
+        action="append",
+        type=_parse_var,
+        metavar="KEY=VALUE",
+        help="value for {{ vars.KEY }} in the pipeline; repeat for several",
+    )
+    run_parser.add_argument(
+        "--timeout", type=float, default=60.0, help="per-step timeout in seconds (default: %(default)s)"
+    )
     run_parser.add_argument(
         "--poll-interval",
         type=float,

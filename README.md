@@ -2,18 +2,75 @@
 
 # ai-workflow-engine
 
-<p align="center"><img src="docs/reel/reel.gif" alt="ai-workflow-engine - 15-second motion reel" width="720"></p>
-<p align="center"><sub><a href="docs/reel/reel.mp4">MP4 version with sound</a></sub></p>
+**A pipeline is a plain YAML file that runs your generate → upscale → lip-sync chain as a DAG — checked into git, not built in a visual editor, and validated in full before the first job is submitted.**
 
-**A pipeline is a plain YAML file that runs your generate → upscale → lip-sync chain as a DAG — checked into git, not built in a visual editor.**
+```bash
+uvx --from git+https://github.com/Furkiozknn/ai-workflow-engine awe --help
+```
 
-![awe validating a two-step pipeline into two layers, then rejecting a copy whose depends_on says genarate](assets/demo.gif)
+Needs [uv](https://docs.astral.sh/uv/) and Python 3.11+. Not on PyPI. Measured on Windows 11: 12 s from an empty cache to `awe --help`. Running a pipeline needs an [`ai-job-gateway`](https://github.com/Furkiozknn/ai-job-gateway) server; `awe validate` needs nothing. The demo below uses the gateway's local stand-in capabilities (`mock-generate`, `echo`): no key, no account, no network, and `draft`'s output is a mock string, not an image.
 
-<sub>Real output. The second file differs from the first by one typo in <code>depends_on</code>; it never reaches a gateway, because the DAG is resolved at load time.</sub>
+```console
+$ uvx --from git+https://github.com/Furkiozknn/ai-job-gateway ai-job-gateway serve   # other terminal
 
-A small DAG orchestrator that chains [`ai-job-gateway`](https://github.com/Furkiozknn/ai-job-gateway)-compatible jobs (generate → upscale → lip-sync, ...) defined as a YAML pipeline. The generalization of ComfyUI's "the graph is a durable, shareable artifact" lesson (see the research in [`Furkiozknn/Furkiozknn`](https://github.com/Furkiozknn/Furkiozknn)'s architecture doc), minus the visual node editor — a pipeline here is a plain YAML file, git-diffable like code.
+$ awe validate examples/mock-chain.yaml
+OK: 'mock-chain' - 3 step(s) in 2 layer(s)
+  layer 0: draft, note
+  layer 1: publish
+  variables referenced: prompt
 
-Part of the same small ecosystem as [`ai-job-gateway`](https://github.com/Furkiozknn/ai-job-gateway), [`prompt-template-manager`](https://github.com/Furkiozknn/prompt-template-manager), [`model-comparison-harness`](https://github.com/Furkiozknn/model-comparison-harness), and [`asset-provenance-toolkit`](https://github.com/Furkiozknn/asset-provenance-toolkit) — coupled only through documented HTTP contracts, never through a shared Python dependency. Vendors the same [`gateway_poll.py`](https://github.com/Furkiozknn/ai-job-gateway/blob/main/src/ai_job_gateway/gateway_poll.py) module as the other three.
+$ awe run examples/mock-chain.yaml --gateway-url http://127.0.0.1:8000 --var prompt='a cat'
+{
+  "draft": {
+    "status": "ready",
+    "result": {
+      "provider": "mock",
+      "job_id": "8211ccc17e574a65b8bda17e661322f3",
+      "params_received": {
+        "prompt": "a cat"
+      },
+      "output": "mock-result-for-8211ccc17e574a65b8bda17e661322f3"
+    },
+    "error": null
+  },
+  "note": {
+    "status": "ready",
+    "result": {
+      "echoed": {
+        "text": "a cat"
+      }
+    },
+    "error": null
+  },
+  "publish": {
+    "status": "ready",
+    "result": {
+      "echoed": {
+        "source": "mock-result-for-8211ccc17e574a65b8bda17e661322f3",
+        "note": "a cat"
+      }
+    },
+    "error": null
+  }
+}
+
+$ awe validate broken.yaml      # a two-step file with one typo in depends_on
+error: step 'publish' depends on unknown step 'dratf' (did you mean 'draft'?)
+
+$ awe run examples/generate-and-upscale.yaml --gateway-url http://127.0.0.1:8000 --var prompt=x
+error: the gateway at http://127.0.0.1:8000 does not offer capability 'media-upscale'; it offers: echo, generate-image, mock-generate (see http://127.0.0.1:8000/v1/capabilities)
+
+$ awe run examples/mock-chain.yaml --gateway-url http://127.0.0.1:9 --var prompt=x
+error: cannot reach the gateway at http://127.0.0.1:9 (All connection attempts failed); is it running? e.g. `ai-job-gateway serve` (default http://127.0.0.1:8000)
+```
+
+<sub>Real output of one session, unedited apart from the omitted `[exit N]` lines (the last three commands exit 1). `draft` and `note` share no data, so they ran side by side; `publish` waited for both. The errors happen before any job exists: the gateway is asked what it offers first.</sub>
+
+### When to use it, when not
+
+Use it when a generative job is several gateway calls in a row (or side by side) and you want that chain to be a reviewable YAML file with typos, cycles and undeclared dependencies caught at load time, bounded concurrency, and the partial results of a failed run.
+
+Do not use it as a durable workflow engine: there is no retry policy, no persistence and no resume, a failed step fails the run and re-running starts from step one (see the [Roadmap](#roadmap--known-v1-limitations)). It only speaks the [ai-job-gateway](https://github.com/Furkiozknn/ai-job-gateway) submit/poll contract, and it ships no model: what a step can do is whatever capabilities your gateway offers.
 
 ## Why
 
@@ -31,16 +88,16 @@ A single `ai-job-gateway` job is one model call. A real creative pipeline is usu
 
 ## Install
 
-Not on PyPI yet — run it from a checkout with [uv](https://docs.astral.sh/uv/) (Python 3.11+):
+Nothing to install for a one-off: the `uvx` line at the top runs it. To keep it around, or to work on it, use a checkout with [uv](https://docs.astral.sh/uv/) (Python 3.11+):
 
 ```bash
 git clone https://github.com/Furkiozknn/ai-workflow-engine
 cd ai-workflow-engine
 uv sync --group dev
-uv run awe validate examples/generate-and-upscale.yaml
+uv run awe validate examples/mock-chain.yaml
 ```
 
-`uv run awe ...` works without activating anything; after `source .venv/bin/activate` the commands below work as plain `awe ...`. Actually *running* a pipeline needs an [`ai-job-gateway`](https://github.com/Furkiozknn/ai-job-gateway) server to submit jobs to; `validate` needs nothing.
+`uv run awe ...` works without activating anything; after `source .venv/bin/activate` (Windows: `.venv\Scripts\activate`) the commands below work as plain `awe ...`. Measured: `git clone` + `uv sync` takes about 5 s. Actually *running* a pipeline needs an [`ai-job-gateway`](https://github.com/Furkiozknn/ai-job-gateway) server to submit jobs to; `validate` needs nothing. `awe --help` and `awe run --help` document every option.
 
 ## Pipeline file format
 
@@ -155,10 +212,15 @@ fewer round trips, lower the ceiling.
 import asyncio
 from ai_workflow_engine import load_pipeline, run_pipeline
 
-pipeline = load_pipeline("pipeline.yaml")
-results = asyncio.run(run_pipeline(pipeline, "http://localhost:8000", variables={"prompt": "a cat"}))
-print(results["upscale"].result)
+pipeline = load_pipeline("examples/mock-chain.yaml")   # PipelineError on a bad file
+results = asyncio.run(
+    run_pipeline(pipeline, "http://127.0.0.1:8000", variables={"prompt": "a cat"})
+)                                                       # PipelineRunError if a step fails
+print(results["publish"].result)
+# {'echoed': {'source': 'mock-result-for-<job id>', 'note': 'a cat'}}
 ```
+
+`results` maps step name to `StepResult(name, status, result, error)`. `PipelineRunError.partial_results` holds what finished before a failure. `run_pipeline(..., check_capabilities=True)` does what `awe run` does first: ask the gateway what it offers and raise `GatewayCheckError` before any job is submitted (off by default, so a library caller keeps one request per job). `help(ai_workflow_engine)` shows the same example.
 
 ## Testing
 
@@ -166,7 +228,7 @@ print(results["upscale"].result)
 uv run pytest -v
 ```
 
-92 tests as of this writing. Eight of them are the contract tests below, which need the real ai-job-gateway installed; without it, `uv run pytest` reports `84 passed, 1 skipped` — the skip names the missing package, and it is expected. CI runs the suite on Python 3.11, 3.12 and 3.13, and builds the package and runs `twine check` on every push.
+106 tests as of this writing. Nine of them are the contract tests below, which need the real ai-job-gateway installed; without it, `uv run pytest` reports `97 passed, 1 skipped` — the skip names the missing package, and it is expected. CI runs the suite on Python 3.11, 3.12 and 3.13, and builds the package and runs `twine check` on every push.
 
 ### Against the real gateway, not against our idea of it
 

@@ -33,7 +33,7 @@
     "workflow-engine",
     "yaml"
   ],
-  "summary": "A pipeline is a plain YAML DAG in git, not a diagram in a visual editor - and it is validated before it runs. A step that reads another step's result without declaring the dependency is rejected at load time, typo and all. Layers run concurrently, capped and backed off so width never becomes a burst. 106 tests.",
+  "summary": "AI generation pipelines as plain YAML DAGs in git, validated before the first job runs: a step that reads an undeclared dependency is rejected at load time. Python CLI: awe.",
   "key_features": [
     "A pipeline is a plain YAML DAG in git, not a diagram in a visual editor",
     "Validated before it runs: a step reading another step's result without declaring the dependency is rejected at load time, typo and all",

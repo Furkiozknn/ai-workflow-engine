@@ -19,8 +19,13 @@ Two things bound what that concurrency costs the gateway on the other end:
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
+import os
 import time
 from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Optional
 
 import httpx
@@ -108,6 +113,95 @@ class StepResult:
     status: str  # "ready" or "error"
     result: Optional[Any] = None
     error: Optional[str] = None
+    #: True when ``resume`` took this result from the state file instead of
+    #: submitting the job again (see ``run_pipeline``).
+    reused: bool = False
+
+
+#: Version of the ``--state`` file layout. Bumped on an incompatible change;
+#: a file with another version is refused rather than half-understood.
+STATE_VERSION = 1
+
+
+class StateFileError(Exception):
+    """The ``--state`` file cannot be used: unreadable, not JSON, another
+    layout version, or written for a different pipeline. Nothing has run."""
+
+
+def step_fingerprint(capability: str, rendered_params: dict[str, Any]) -> str:
+    """SHA-256 over the canonical JSON of what a step submits.
+
+    Taken *after* rendering, so it covers the ``--var`` values and the
+    upstream results the params were rendered from. A resumed run reuses a
+    recorded result only when this matches: change a variable, edit the
+    step, or let an upstream step produce something new, and the step runs
+    again. This is the same rule Prefect's input-hash cache keys and
+    Snakemake's rerun triggers follow.
+    """
+    canonical = json.dumps(
+        {"capability": capability, "params": rendered_params},
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        default=str,
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def load_state(path: str | Path, pipeline: Pipeline) -> dict[str, dict[str, Any]]:
+    """The recorded steps of a state file, or ``{}`` if it does not exist.
+
+    A missing file is a fresh start, so ``awe run --state run.json --resume``
+    can be the one command used every time. Anything else that makes the
+    file unusable raises :class:`StateFileError` before a job is submitted.
+    """
+    path = Path(path)
+    try:
+        text = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return {}
+    except (OSError, UnicodeDecodeError) as exc:
+        raise StateFileError(f"cannot read state file {path}: {exc}") from exc
+    try:
+        data = json.loads(text)
+    except ValueError as exc:
+        raise StateFileError(f"state file {path} is not valid JSON: {exc}") from exc
+    if not isinstance(data, dict) or data.get("awe_state") != STATE_VERSION:
+        raise StateFileError(
+            f"state file {path} is not an awe state file (version {STATE_VERSION}); "
+            "delete it or pass another --state path"
+        )
+    if data.get("pipeline") != pipeline.name:
+        raise StateFileError(
+            f"state file {path} was written for pipeline {data.get('pipeline')!r}, "
+            f"not {pipeline.name!r}; use a separate --state file per pipeline"
+        )
+    steps = data.get("steps")
+    if not isinstance(steps, dict):
+        raise StateFileError(f"state file {path} has no 'steps' mapping")
+    known = pipeline.step_names()
+    return {
+        name: entry
+        for name, entry in steps.items()
+        if name in known and isinstance(entry, dict)
+    }
+
+
+def _write_state(path: Path, pipeline: Pipeline, steps: dict[str, dict[str, Any]]) -> None:
+    """Write the state file atomically: a crash mid-write leaves the previous
+    file, never a truncated one that the next ``--resume`` cannot read."""
+    payload = {
+        "awe_state": STATE_VERSION,
+        "pipeline": pipeline.name,
+        "updated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "steps": {name: steps[name] for name in sorted(steps)},
+    }
+    tmp = path.with_name(f".{path.name}.tmp")
+    try:
+        tmp.write_text(json.dumps(payload, indent=2, default=str) + "\n", encoding="utf-8")
+        os.replace(tmp, path)
+    except OSError as exc:
+        raise StateFileError(f"cannot write state file {path}: {exc.strerror or exc}") from exc
 
 
 async def check_gateway(pipeline: Pipeline, gateway_url: str, client: httpx.AsyncClient) -> None:
@@ -205,6 +299,8 @@ async def run_pipeline(
     max_poll_interval: float = DEFAULT_MAX_POLL_INTERVAL,
     max_concurrent_steps: Optional[int] = DEFAULT_MAX_CONCURRENT_STEPS,
     check_capabilities: bool = False,
+    state_path: Optional[str | Path] = None,
+    resume: bool = False,
 ) -> dict[str, StepResult]:
     """Run every step of ``pipeline`` in dependency order. Returns a dict of
     every step's StepResult, keyed by step name - including steps that
@@ -217,7 +313,30 @@ async def run_pipeline(
     ``awe run`` does) and raises :class:`GatewayCheckError` before any job is
     submitted. It is off by default so library callers keep exactly one
     request per job.
+
+    ``state_path`` records every finished step (its result or error and
+    :func:`step_fingerprint`) to a JSON file after each layer, atomically.
+    With ``resume=True`` the file is read first, and a step whose recorded
+    status is ``ready`` and whose fingerprint matches what it would submit
+    now is not submitted again: its recorded result is used (``reused`` is
+    True on its StepResult). Failed steps always run again, and so does
+    anything downstream of a step whose result changed. Raises
+    :class:`StateFileError` before any job if the file is unusable.
     """
+    if resume and state_path is None:
+        raise ValueError("resume=True needs a state_path to resume from")
+    state_file = Path(state_path) if state_path is not None else None
+    # Loaded before the client exists and before any job: a state file for
+    # the wrong pipeline must cost nothing.
+    recorded: dict[str, dict[str, Any]] = (
+        load_state(state_file, pipeline) if resume and state_file is not None else {}
+    )
+    state: dict[str, dict[str, Any]] = dict(recorded)
+    if state_file is not None:
+        # Written once up front so an unwritable path fails here, before
+        # any job, rather than after the first layer has already run.
+        _write_state(state_file, pipeline, state)
+
     client = http_client or httpx.AsyncClient()
     owns_client = http_client is None
     slots = asyncio.Semaphore(max_concurrent_steps) if max_concurrent_steps else None
@@ -226,6 +345,7 @@ async def run_pipeline(
 
     results: dict[str, StepResult] = {}
     steps_context: dict[str, Any] = {}
+    fingerprints: dict[str, str] = {}
 
     try:
         if check_capabilities:
@@ -238,6 +358,17 @@ async def run_pipeline(
                     rendered = render_params(step.params, steps=steps_context, variables=variables)
                 except TemplateRenderError as exc:
                     return StepResult(name=step_name, status="error", error=f"template error: {exc}")
+                fingerprint = step_fingerprint(step.capability, rendered)
+                fingerprints[step_name] = fingerprint
+                prior = recorded.get(step_name)
+                if (
+                    prior is not None
+                    and prior.get("status") == "ready"
+                    and prior.get("fingerprint") == fingerprint
+                ):
+                    return StepResult(
+                        name=step_name, status="ready", result=prior.get("result"), reused=True
+                    )
                 try:
                     # Unlike ai-job-gateway's webhook semaphore -- which is
                     # released across the retry sleep so a backing-off
@@ -264,6 +395,18 @@ async def run_pipeline(
             for step_result in layer_results:
                 results[step_result.name] = step_result
                 steps_context[step_result.name] = {"status": step_result.status, "result": step_result.result}
+                if state_file is not None:
+                    state[step_result.name] = {
+                        "status": step_result.status,
+                        "capability": pipeline.step(step_result.name).capability,
+                        # None when the params never rendered: such a step
+                        # can never match, so it always runs again.
+                        "fingerprint": fingerprints.get(step_result.name),
+                        "result": step_result.result,
+                        "error": step_result.error,
+                    }
+            if state_file is not None:
+                _write_state(state_file, pipeline, state)
 
             failed = [r for r in layer_results if r.status == "error"]
             if failed:

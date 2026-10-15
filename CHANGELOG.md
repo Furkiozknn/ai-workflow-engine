@@ -4,6 +4,17 @@ This project follows [Semantic Versioning](https://semver.org/). The version
 in `pyproject.toml`, `ai_workflow_engine.__version__` and the git tag must
 agree; the release workflow and `tests/test_version.py` check that.
 
+## Unreleased
+
+- `awe run --state run.json` records every finished step (status, result
+  or error, and a SHA-256 fingerprint of its capability and rendered
+  params) to a JSON file, atomically, before the first job and after every
+  layer. `--resume` reuses each step that succeeded and would submit exactly
+  the same thing again. Failed steps, changed steps and steps downstream of
+  a changed result run again. A state file for another pipeline, another
+  layout version or not JSON is refused before any job (`StateFileError`).
+  `StepResult.reused` marks reused steps; stdout's JSON shape is unchanged.
+
 ## 0.1.0 — not yet tagged
 
 First release. Everything below is on `main`; no tag or PyPI upload exists yet.

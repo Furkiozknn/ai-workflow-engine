@@ -21,6 +21,7 @@ from .runner import (
     DEFAULT_MAX_POLL_INTERVAL,
     DEFAULT_POLL_INTERVAL,
     PipelineRunError,
+    StateFileError,
     run_pipeline,
 )
 
@@ -90,11 +91,13 @@ def _cmd_run(args: argparse.Namespace) -> None:
             max_poll_interval=args.max_poll_interval,
             max_concurrent_steps=args.max_concurrent_steps or None,
             check_capabilities=True,
+            state_path=args.state,
+            resume=args.resume,
         )
 
     try:
         results = asyncio.run(_go())
-    except GatewayCheckError as exc:
+    except (GatewayCheckError, StateFileError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         raise SystemExit(1)
     except PipelineRunError as exc:
@@ -102,8 +105,22 @@ def _cmd_run(args: argparse.Namespace) -> None:
         partial = getattr(exc, "partial_results", {})
         for name, step_result in partial.items():
             status_marker = "OK" if step_result.status == "ready" else "FAIL"
-            print(f"  [{status_marker}] {name}", file=sys.stderr)
+            reused = " (reused)" if step_result.reused else ""
+            print(f"  [{status_marker}] {name}{reused}", file=sys.stderr)
+        if args.state:
+            print(
+                f"state saved to {args.state}; fix the cause and re-run with "
+                f"--state {args.state} --resume to skip the steps that succeeded",
+                file=sys.stderr,
+            )
         raise SystemExit(1)
+
+    reused = [name for name, r in results.items() if r.reused]
+    if reused:
+        print(
+            f"reused {len(reused)} step(s) from {args.state}: {', '.join(reused)}",
+            file=sys.stderr,
+        )
 
     output = {
         name: {"status": r.status, "result": r.result, "error": r.error} for name, r in results.items()
@@ -190,9 +207,27 @@ def main() -> None:
             "once; 0 submits a whole layer at once (default: %(default)s)"
         ),
     )
+    run_parser.add_argument(
+        "--state",
+        metavar="PATH",
+        help=(
+            "record every finished step (result or error, and a fingerprint of what it "
+            "submitted) to this JSON file after each layer"
+        ),
+    )
+    run_parser.add_argument(
+        "--resume",
+        action="store_true",
+        help=(
+            "with --state: reuse each step that succeeded in the recorded run and would "
+            "submit exactly the same thing again; failed and changed steps run again"
+        ),
+    )
     run_parser.set_defaults(func=_cmd_run)
 
     args = parser.parse_args()
+    if getattr(args, "resume", False) and not args.state:
+        parser.error("--resume needs --state PATH (the file to resume from)")
     args.func(args)
 
 

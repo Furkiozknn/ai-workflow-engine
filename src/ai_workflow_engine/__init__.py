@@ -21,6 +21,7 @@ from __future__ import annotations
 
 from .pipeline import Pipeline, PipelineError, Step, load_pipeline, parse_pipeline, referenced_variables
 from .runner import GatewayCheckError, PipelineRunError, StepResult, check_gateway, run_pipeline
+from .runner import StateFileError, load_state, step_fingerprint
 
 __all__ = [
     "Pipeline",
@@ -34,6 +35,9 @@ __all__ = [
     "check_gateway",
     "StepResult",
     "run_pipeline",
+    "StateFileError",
+    "load_state",
+    "step_fingerprint",
 ]
 
 __version__ = "0.1.0"

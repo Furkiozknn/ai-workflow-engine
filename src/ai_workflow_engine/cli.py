@@ -1,4 +1,4 @@
-"""Command-line entry point: `awe validate|run`."""
+"""Command-line entry point: `awe validate|graph|run`."""
 
 from __future__ import annotations
 
@@ -60,6 +60,26 @@ def _cmd_validate(args: argparse.Namespace) -> None:
     var_refs = referenced_variables(pipeline)
     if var_refs:
         print(f"  variables referenced: {', '.join(sorted(var_refs))}")
+
+
+def _cmd_graph(args: argparse.Namespace) -> None:
+    from .graph import render_graph
+
+    try:
+        pipeline = load_pipeline(args.file)
+    except PipelineError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        raise SystemExit(1)
+    text = render_graph(pipeline, args.format, show_vars=args.show_vars)
+    if args.output:
+        try:
+            with open(args.output, "w", encoding="utf-8", newline="\n") as handle:
+                handle.write(text)
+        except OSError as exc:
+            print(f"error: cannot write {args.output}: {exc.strerror or exc}", file=sys.stderr)
+            raise SystemExit(1)
+    else:
+        sys.stdout.write(text)
 
 
 def _cmd_run(args: argparse.Namespace) -> None:
@@ -130,7 +150,7 @@ def main() -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("--version", action="version", version=f"awe {__version__}")
-    subparsers = parser.add_subparsers(dest="command", required=True, metavar="{validate,run}")
+    subparsers = parser.add_subparsers(dest="command", required=True, metavar="{validate,graph,run}")
 
     validate_parser = subparsers.add_parser(
         "validate",
@@ -139,6 +159,38 @@ def main() -> None:
     )
     validate_parser.add_argument("file", help="path to the pipeline YAML file")
     validate_parser.set_defaults(func=_cmd_validate)
+
+    graph_parser = subparsers.add_parser(
+        "graph",
+        help="print a pipeline's DAG as Mermaid or Graphviz DOT (runs nothing)",
+        description=(
+            "Validate a pipeline file, then print its DAG: one box per step (name and "
+            "capability), one arrow per depends_on entry, steps of one execution layer "
+            "side by side. Mermaid renders inline on GitHub; DOT goes through Graphviz."
+        ),
+        epilog=(
+            "examples:\n"
+            "  awe graph examples/mock-chain.yaml > dag.mmd\n"
+            "  awe graph examples/mock-chain.yaml --format dot | dot -Tsvg > dag.svg"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    graph_parser.add_argument("file", help="path to the pipeline YAML file")
+    graph_parser.add_argument(
+        "--format",
+        choices=("mermaid", "dot"),
+        default="mermaid",
+        help="output format (default: %(default)s)",
+    )
+    graph_parser.add_argument(
+        "--show-vars",
+        action="store_true",
+        help="also list the vars.* each step reads in its box",
+    )
+    graph_parser.add_argument(
+        "-o", "--output", metavar="PATH", help="write to PATH instead of stdout"
+    )
+    graph_parser.set_defaults(func=_cmd_graph)
 
     run_parser = subparsers.add_parser(
         "run",

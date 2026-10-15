@@ -70,7 +70,7 @@ error: cannot reach the gateway at http://127.0.0.1:9 (All connection attempts f
 
 Use it when a generative job is several gateway calls in a row (or side by side) and you want that chain to be a reviewable YAML file with typos, cycles and undeclared dependencies caught at load time, bounded concurrency, and the partial results of a failed run.
 
-Do not use it as a durable workflow engine: there is no retry policy, no persistence and no resume, a failed step fails the run and re-running starts from step one (see the [Roadmap](#roadmap--known-v1-limitations)). It only speaks the [ai-job-gateway](https://github.com/Furkiozknn/ai-job-gateway) submit/poll contract, and it ships no model: what a step can do is whatever capabilities your gateway offers.
+Do not use it as a durable workflow engine: there is no retry policy and no server-side state, and a failed step fails the run. `--state run.json --resume` re-runs only what failed or changed ([Resuming a failed run](#resuming-a-failed-run)), but that is a file next to your pipeline, not a durable execution history (see the [Roadmap](#roadmap--known-v1-limitations)). It only speaks the [ai-job-gateway](https://github.com/Furkiozknn/ai-job-gateway) submit/poll contract, and it ships no model: what a step can do is whatever capabilities your gateway offers.
 
 ## Why
 
@@ -206,6 +206,43 @@ interval late, bounded by `--max-poll-interval`. That trade is worth naming
 rather than burying — if a pipeline needs tighter latency more than it needs
 fewer round trips, lower the ceiling.
 
+## Resuming a failed run
+
+A generation chain usually fails late: the image came back, the upscale timed out. Re-running from step one pays for the image again. `--state PATH` records every finished step after each layer, and `--resume` reuses what already succeeded:
+
+```console
+$ awe run examples/mock-chain.yaml --gateway-url http://127.0.0.1:8000 --var prompt='a cat' --timeout 0.2 --state run.json
+error: step 'draft' failed: did not finish within 0.2s (last status: 'processing')
+  [FAIL] draft
+  [OK] note
+state saved to run.json; fix the cause and re-run with --state run.json --resume to skip the steps that succeeded
+
+$ awe run examples/mock-chain.yaml --gateway-url http://127.0.0.1:8000 --var prompt='a cat' --state run.json --resume
+reused 1 step(s) from run.json: note
+{
+  "draft": {
+    "status": "ready",
+    ...
+```
+
+<sub>Real output against `ai-job-gateway serve`; the second command's JSON is cut at `...`. `--timeout 0.2` forces the failure, since `mock-generate` takes 0.5 to 2 s.</sub>
+
+**When a step is reused.** Only when its recorded status is `ready` **and** it would submit exactly the same thing again. The state file stores a SHA-256 fingerprint of the step's capability and its **rendered** params, so the check covers the `--var` values and the upstream results the params were rendered from:
+
+- A failed step always runs again.
+- Change a `--var` or edit a step's params, and that step runs again.
+- If an upstream step runs again and returns something different, every step that reads it renders different params and runs again too. If it returns the same thing, those steps are reused.
+
+This is input-hash caching, the rule Prefect's cache keys and Snakemake's rerun triggers use, and the restart-from-failure that Kestra and Dagster offer in their UIs. Here it is one JSON file and no server.
+
+**The file.** `{"awe_state": 1, "pipeline": ..., "steps": {name: {status, capability, fingerprint, result, error}}}`, written atomically (temp file plus rename) before the first job and after every layer. A missing file with `--resume` is a fresh run, so `--state run.json --resume` can be the one command you always use. Without `--resume` the file is overwritten. A file written for another pipeline name, of another layout version, or not JSON is refused before any job is submitted. Steps no longer in the pipeline are dropped.
+
+**Limits, plainly.**
+
+- A reused result is what the gateway returned last time. If it points at something short-lived (a hosted URL that expired, a file someone deleted), the step that reads it fails. Rerun without `--resume`.
+- The fingerprint covers what awe sends, not the model behind the capability. If the gateway now serves a different model under the same name, a reused step does not notice.
+- Library: `run_pipeline(..., state_path="run.json", resume=True)`. `StepResult.reused` says which steps came from the file, and `StateFileError` is the refusal. stdout's JSON shape is unchanged; the reuse summary goes to stderr.
+
 ## Library usage
 
 ```python
@@ -228,7 +265,7 @@ print(results["publish"].result)
 uv run pytest -v
 ```
 
-106 tests as of this writing. Nine of them are the contract tests below, which need the real ai-job-gateway installed; without it, `uv run pytest` reports `97 passed, 1 skipped` — the skip names the missing package, and it is expected. CI runs the suite on Python 3.11, 3.12 and 3.13, and builds the package and runs `twine check` on every push.
+122 tests as of this writing. Nine of them are the contract tests below, which need the real ai-job-gateway installed; without it, `uv run pytest` reports `113 passed, 1 skipped` — the skip names the missing package, and it is expected. CI runs the suite on Python 3.11, 3.12 and 3.13, and builds the package and runs `twine check` on every push.
 
 ### Against the real gateway, not against our idea of it
 
@@ -283,7 +320,7 @@ A pipeline file can come from somewhere other than the operator who's about to r
 
 - No retry policy per step — a failed step fails the whole run. Retries are a natural v2 addition once real (non-mock) providers surface which failures are worth retrying automatically.
 - `depends_on` is explicit, not inferred from template references (see above) — but a `steps.<name>` reference **is now cross-checked against `depends_on`** at load time, so the two can no longer silently drift apart. Full auto-inference (deriving `depends_on` from template references instead of requiring both) was considered and deliberately deferred: it's a nicer authoring experience but removes the property that the DAG's shape is visible just from the `depends_on` lists, without parsing every template string.
-- No persistence — a pipeline run's state lives only in the process that ran `awe run`. There's no resume-from-where-it-failed yet; re-running re-executes every step from scratch.
+- Persistence is opt-in and local: `--state` writes one JSON file, and `--resume` reuses its successful steps when their fingerprint still matches. There is no execution history, no lock against two runs sharing one state file, and no partial reuse of a step that was still running when the process died (its job is submitted again).
 - The static `steps.<name>...` / `vars.<name>` reference scan (used by both the `depends_on` cross-check and `validate`'s "variables referenced" line) is best-effort: it recognizes the dotted-attribute form used throughout this project (`steps.generate.result.output`), not a dynamic/subscript form (`steps[some_var].result`). The latter isn't used anywhere in this project's own pipelines; the runtime `StrictUndefined` check still catches a real problem in that case, this is purely an early-warning layer on top.
 - Poll backoff is deterministic, not jittered. A wide layer's steps are submitted together, so their polls stay roughly in step with each other; `--max-concurrent-steps` is what actually spreads them out, and the gateway is a local server rather than a rate-limited third party. Jitter (as `ai-job-gateway` uses for its webhook retries) would be the next refinement if that stops being true.
 - The concurrency cap is per `run_pipeline` call, not per gateway. Two `awe run` processes against one gateway can still put 20 jobs in flight between them; a shared limit would need coordination this tool deliberately doesn't have.

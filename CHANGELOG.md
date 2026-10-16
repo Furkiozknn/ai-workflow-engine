@@ -4,6 +4,15 @@ This project follows [Semantic Versioning](https://semver.org/). The version
 in `pyproject.toml`, `ai_workflow_engine.__version__` and the git tag must
 agree; the release workflow and `tests/test_version.py` check that.
 
+## Unreleased
+
+- A transient poll failure (network error, 502/503/504) is retried up to
+  three times with backoff instead of failing the run; the job is never
+  resubmitted. A malformed 2xx submission response is reported as
+  "invalid submission response" naming the missing field, instead of an
+  `AssertionError`/`KeyError`. Both come with the re-vendored
+  `gateway_poll.py` from ai-job-gateway.
+
 ## 0.1.0 — not yet tagged
 
 First release. Everything below is on `main`; no tag or PyPI upload exists yet.

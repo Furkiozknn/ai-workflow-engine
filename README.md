@@ -72,6 +72,14 @@ Use it when a generative job is several gateway calls in a row (or side by side)
 
 Do not use it as a durable workflow engine: there is no retry policy, no persistence and no resume, a failed step fails the run and re-running starts from step one (see the [Roadmap](#roadmap--known-v1-limitations)). It only speaks the [ai-job-gateway](https://github.com/Furkiozknn/ai-job-gateway) submit/poll contract, and it ships no model: what a step can do is whatever capabilities your gateway offers.
 
+### Why not Prefect or Kestra?
+
+[Prefect](https://github.com/PrefectHQ/prefect) orchestrates Python workflows, with retries, caching, scheduling and a UI. [Kestra](https://github.com/kestra-io/kestra) defines workflows in declarative YAML and runs them on a server with a web UI, triggers, retries and timeouts.
+
+Use one of them when a workflow must survive failures, run on a schedule or resume. awe has none of that.
+
+What awe does differently: there is no server, and a pipeline file is checked before any job is submitted. It rejects unknown dependencies (with a did-you-mean), cycles, and `steps.*` references that are not declared in `depends_on`. It also asks the gateway whether every capability exists. The result is a reviewable YAML chain of async-job calls that fails before any GPU time is spent.
+
 ## Why
 
 A single `ai-job-gateway` job is one model call. A real creative pipeline is usually several, chained: generate an image, then upscale it, then run lip-sync on the result. Wiring that by hand each time (submit, poll, copy the URL out of the result, submit the next job) is exactly the kind of repetitive plumbing this tool exists to remove — while staying just a plain YAML file, not a hosted visual builder.

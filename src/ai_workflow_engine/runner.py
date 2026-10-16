@@ -26,11 +26,14 @@ from typing import Any, Optional
 import httpx
 
 from .gateway_poll import (
+    GatewayContractError,
     GatewayHTTPError,
     classify_poll_body,
     expired_detail,
     is_expired_poll_response,
+    is_transient_poll_status,
     parse_submission,
+    poll_retry_delays,
     resolve_polling_url,
     submit_url,
 )
@@ -144,6 +147,34 @@ async def check_gateway(pipeline: Pipeline, gateway_url: str, client: httpx.Asyn
         )
 
 
+async def _poll_with_retry(
+    http_client: httpx.AsyncClient, url: str, *, deadline: float
+) -> httpx.Response:
+    """One poll GET, retried on a network error or a 502/503/504.
+
+    A poll has no side effects, so asking again is safe, and one dropped
+    connection used to fail the whole run. The number of retries and the
+    waits between them come from the vendored ``gateway_poll`` module
+    (bounded, a few seconds in total). A retry that would sleep past the
+    step's deadline is not attempted: the last failure is returned or
+    raised as it was, and the step reports it.
+    """
+    delays = poll_retry_delays()
+    attempt = 0
+    while True:
+        give_up = attempt == len(delays) or time.monotonic() + delays[attempt] >= deadline
+        try:
+            response = await http_client.get(url)
+        except httpx.TransportError:
+            if give_up:
+                raise
+        else:
+            if give_up or not is_transient_poll_status(response.status_code):
+                return response
+        await asyncio.sleep(delays[attempt])
+        attempt += 1
+
+
 async def _run_step(
     gateway_url: str,
     capability: str,
@@ -158,17 +189,25 @@ async def _run_step(
     or raises PipelineRunError-friendly exceptions (caller attaches the
     step name)."""
     response = await http_client.post(submit_url(gateway_url, capability), json=rendered_params)
-    body_json = response.json() if response.status_code < 400 else None
+    body_json = None
+    if response.status_code < 400:
+        try:
+            body_json = response.json()
+        except ValueError:
+            body_json = None  # parse_submission reports it as not a JSON object
     try:
         _job_id, polling_url = parse_submission(response.status_code, body_json, response.text)
     except GatewayHTTPError as exc:
         raise RuntimeError(f"submission rejected ({exc.status_code}): {exc.body_text}") from exc
+    except GatewayContractError as exc:
+        raise RuntimeError(f"invalid submission response ({exc.status_code}): {exc.reason}") from exc
 
     started = time.monotonic()
     deadline = started + timeout
     interval = poll_interval
+    poll_url = resolve_polling_url(gateway_url, polling_url)
     while True:
-        poll_response = await http_client.get(resolve_polling_url(gateway_url, polling_url))
+        poll_response = await _poll_with_retry(http_client, poll_url, deadline=deadline)
         if is_expired_poll_response(poll_response.status_code):
             raise RuntimeError(expired_detail(poll_response.json()))
         poll_response.raise_for_status()

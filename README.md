@@ -72,6 +72,14 @@ Use it when a generative job is several gateway calls in a row (or side by side)
 
 Do not use it as a durable workflow engine: there is no retry policy, no persistence and no resume, a failed step fails the run and re-running starts from step one (see the [Roadmap](#roadmap--known-v1-limitations)). It only speaks the [ai-job-gateway](https://github.com/Furkiozknn/ai-job-gateway) submit/poll contract, and it ships no model: what a step can do is whatever capabilities your gateway offers.
 
+### Why not Prefect or Kestra?
+
+[Prefect](https://github.com/PrefectHQ/prefect) orchestrates Python workflows, with retries, caching, scheduling and a UI. [Kestra](https://github.com/kestra-io/kestra) defines workflows in declarative YAML and runs them on a server with a web UI, triggers, retries and timeouts.
+
+Use one of them when a workflow must survive failures, run on a schedule or resume. awe has none of that.
+
+What awe does differently: there is no server, and a pipeline file is checked before any job is submitted. It rejects unknown dependencies (with a did-you-mean), cycles, and `steps.*` references that are not declared in `depends_on`. It also asks the gateway whether every capability exists. The result is a reviewable YAML chain of async-job calls that fails before any GPU time is spent.
+
 ## Why
 
 A single `ai-job-gateway` job is one model call. A real creative pipeline is usually several, chained: generate an image, then upscale it, then run lip-sync on the result. Wiring that by hand each time (submit, poll, copy the URL out of the result, submit the next job) is exactly the kind of repetitive plumbing this tool exists to remove — while staying just a plain YAML file, not a hosted visual builder.
@@ -279,7 +287,7 @@ print(results["publish"].result)
 uv run pytest -v
 ```
 
-115 tests as of this writing. Nine of them are the contract tests below, which need the real ai-job-gateway installed; without it, `uv run pytest` reports `106 passed, 1 skipped` — the skip names the missing package, and it is expected. CI runs the suite on Python 3.11, 3.12 and 3.13, and builds the package and runs `twine check` on every push.
+143 tests as of this writing. Nine of them are the contract tests below, which need the real ai-job-gateway installed; without it, `uv run pytest` reports `134 passed, 1 skipped` — the skip names the missing package, and it is expected. CI runs the suite on Python 3.11, 3.12 and 3.13, and builds the package and runs `twine check` on every push.
 
 ### Against the real gateway, not against our idea of it
 
@@ -332,7 +340,7 @@ A pipeline file can come from somewhere other than the operator who's about to r
 
 <img src="assets/failure.svg" alt="Failure semantics: layer 0 succeeds and its results are kept, a step in layer 1 raises and the run stops there with PipelineRunError carrying the failing step and every result collected so far, and layer 2 never starts - no skipped status is invented for it." width="100%">
 
-- No retry policy per step — a failed step fails the whole run. Retries are a natural v2 addition once real (non-mock) providers surface which failures are worth retrying automatically.
+- No retry policy per step — a failed step fails the whole run. Retries are a natural v2 addition once real (non-mock) providers surface which failures are worth retrying automatically. Only the *poll* is retried. A network error or a `502`/`503`/`504` on the polling GET is asked again up to three times (0.5 s, 1 s, 2 s; never past the step's timeout), because a poll has no side effects. The job itself is never resubmitted.
 - `depends_on` is explicit, not inferred from template references (see above) — but a `steps.<name>` reference **is now cross-checked against `depends_on`** at load time, so the two can no longer silently drift apart. Full auto-inference (deriving `depends_on` from template references instead of requiring both) was considered and deliberately deferred: it's a nicer authoring experience but removes the property that the DAG's shape is visible just from the `depends_on` lists, without parsing every template string.
 - No persistence — a pipeline run's state lives only in the process that ran `awe run`. There's no resume-from-where-it-failed yet; re-running re-executes every step from scratch.
 - The static `steps.<name>...` / `vars.<name>` reference scan (used by both the `depends_on` cross-check and `validate`'s "variables referenced" line) is best-effort: it recognizes the dotted-attribute form used throughout this project (`steps.generate.result.output`), not a dynamic/subscript form (`steps[some_var].result`). The latter isn't used anywhere in this project's own pipelines; the runtime `StrictUndefined` check still catches a real problem in that case, this is purely an early-warning layer on top.

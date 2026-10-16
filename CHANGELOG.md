@@ -12,6 +12,11 @@ agree; the release workflow and `tests/test_version.py` check that.
   "invalid submission response" naming the missing field, instead of an
   `AssertionError`/`KeyError`. Both come with the re-vendored
   `gateway_poll.py` from ai-job-gateway.
+- `awe graph FILE` prints a validated pipeline's DAG as Mermaid (default,
+  renders inline on GitHub) or Graphviz DOT (`--format dot`), with one box
+  per step, one edge per `depends_on` entry and each execution layer side by
+  side. `--show-vars` lists the variables each step reads; `-o` writes to a
+  file. Library: `ai_workflow_engine.graph.render_graph()`.
 
 ## 0.1.0 — not yet tagged
 

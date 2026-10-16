@@ -14,7 +14,7 @@ Public surface::
     print(results["publish"].result)
 
 ``results`` maps step name to :class:`StepResult` (``status``, ``result``,
-``error``). The command line is ``awe validate|run`` (see ``awe --help``).
+``error``). The command line is ``awe validate|graph|run`` (see ``awe --help``).
 """
 
 from __future__ import annotations
